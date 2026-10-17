@@ -31,6 +31,8 @@ data class MainScreenUiState(
   val selectedDoorId: String? = null,
   val openingDoorId: String? = null,
   val successfulDoorId: String? = null,
+  val failedDoorId: String? = null,
+  val doorErrorMessage: String? = null,
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
@@ -110,7 +112,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
   fun selectDoor(id: String) {
     _uiState.update { state ->
       if (state.busy || state.doors.none { it.stableId == id }) state
-      else state.copy(selectedDoorId = id, successfulDoorId = null)
+      else state.copy(selectedDoorId = id, successfulDoorId = null, failedDoorId = null, doorErrorMessage = null)
     }
   }
 
@@ -119,7 +121,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     if (uiState.value.busy) return
     viewModelScope.launch {
       _uiState.update {
-        it.copy(busy = true, openingDoorId = key.stableId, successfulDoorId = null)
+        it.copy(busy = true, openingDoorId = key.stableId, successfulDoorId = null, failedDoorId = null, doorErrorMessage = null)
       }
       try {
         withContext(Dispatchers.IO) {
@@ -139,6 +141,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
       } catch (error: Exception) {
         handleRequestError(error)
+        _uiState.update {
+          if (it.loggedIn) it.copy(failedDoorId = key.stableId, doorErrorMessage = error.message?.takeIf(String::isNotBlank) ?: "请求失败") else it
+        }
       } finally {
         _uiState.update {
           if (it.openingDoorId == key.stableId) {
@@ -216,6 +221,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
           selectedDoorId = null,
           openingDoorId = null,
           successfulDoorId = null,
+          failedDoorId = null,
+          doorErrorMessage = null,
         )
       }
       DoorWidgetProvider.updateAll(getApplication())
