@@ -8,7 +8,7 @@ android {
     namespace = "top.rpone.qinlinopen"
     compileSdk = 36
     defaultConfig {
-        applicationId = "top.rpone.qinlinopen"
+        applicationId = "top.rpone.qinlinopen.wallet"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
