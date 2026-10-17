@@ -146,21 +146,27 @@ internal fun WalletMainCard(
     label = "wallet-success-settle",
   )
   var offsetPx by remember { mutableFloatStateOf(0f) }
-  var rawDragPx by remember { mutableFloatStateOf(0f) }
-  // A new gesture starts wherever the previous spring was interrupted.
-  // Keep this independent of the drawing offset, which may be edge-resisted.
-  var dragStartRawPx by remember { mutableFloatStateOf(0f) }
+  // Capture the visible position once per gesture, not the inherited raw spring
+  // distance: it may have been legal on the previous key but illegal on this one.
+  var dragStartVisiblePx by remember { mutableFloatStateOf(0f) }
+  var gestureTravelPx by remember { mutableFloatStateOf(0f) }
   var settleJob by remember { mutableStateOf<Job?>(null) }
   var suppressOpenUntil by remember { mutableLongStateOf(0L) }
   val dragState = rememberDraggableState { delta ->
-    rawDragPx += delta
-    offsetPx = walletDragOffset(rawDragPx, canSwipePrevious, canSwipeNext, edgeLimit)
+    gestureTravelPx += delta
+    offsetPx = walletDragFromVisibleBaseline(
+      startVisiblePx = dragStartVisiblePx,
+      gestureTravelPx = gestureTravelPx,
+      canSwipePrevious = canSwipePrevious,
+      canSwipeNext = canSwipeNext,
+      limitPx = edgeLimit,
+    )
   }
   LaunchedEffect(motion) {
     if (!motion) {
       settleJob?.cancel()
-      rawDragPx = 0f
-      dragStartRawPx = 0f
+      gestureTravelPx = 0f
+      dragStartVisiblePx = 0f
       offsetPx = 0f
     }
   }
@@ -197,18 +203,18 @@ internal fun WalletMainCard(
         onDragStarted = {
           suppressOpenUntil = SystemClock.uptimeMillis() + 1_000L
           settleJob?.cancel()
-          // Visual continuity and selection qualification are deliberately separate:
-          // the inherited spring displacement cannot count as a new swipe.
-          dragStartRawPx = rawDragPx
+          // Keep the exact visible position after a key change; any edge
+          // resistance belongs to the NEW finger movement only.
+          dragStartVisiblePx = offsetPx
+          gestureTravelPx = 0f
         },
         onDragStopped = { velocity ->
           suppressOpenUntil = SystemClock.uptimeMillis() + 250L
-          val oldRawOffset = rawDragPx
+          val oldVisibleOffset = offsetPx
           // Distance wins only if it crossed the full selection threshold.
           // For a shorter gesture reversed at release, velocity determines direction.
           val direction = walletSwipeDirection(
-            distancePx = rawDragPx,
-            gestureStartOffsetPx = dragStartRawPx,
+            distancePx = gestureTravelPx,
             velocityPxPerSecond = velocity,
             distanceThresholdPx = switchDistance,
             velocityThresholdPxPerSecond = switchVelocity,
@@ -225,7 +231,7 @@ internal fun WalletMainCard(
           settleJob?.cancel()
           settleJob = scope.launch {
             animate(
-              initialValue = oldRawOffset,
+              initialValue = oldVisibleOffset,
               targetValue = 0f,
               initialVelocity = settlingVelocity,
               animationSpec = spring(
@@ -233,11 +239,13 @@ internal fun WalletMainCard(
                 stiffness = Spring.StiffnessMediumLow,
               ),
             ) { value, _ ->
-              rawDragPx = value
-              offsetPx = walletDragOffset(value, canSwipePrevious, canSwipeNext, edgeLimit)
+              // Animate the display-space offset itself. Reapplying the current
+              // key's edge curve here would snap a returning card after swiping
+              // onto a key with a different neighbor configuration.
+              offsetPx = value
             }
-            rawDragPx = 0f
-            dragStartRawPx = 0f
+            gestureTravelPx = 0f
+            dragStartVisiblePx = 0f
             offsetPx = 0f
           }
         },
