@@ -33,6 +33,7 @@ data class MainScreenUiState(
   val successfulDoorId: String? = null,
   val failedDoorId: String? = null,
   val doorErrorMessage: String? = null,
+  val authErrorMessage: String? = null,
 )
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
@@ -56,19 +57,21 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
   }
 
   fun setPhone(value: String) {
-    _uiState.update { it.copy(phone = value.filter(Char::isDigit).take(11)) }
+    _uiState.update { it.copy(phone = value.filter(Char::isDigit).take(11), authErrorMessage = null) }
   }
 
   fun setSecurityCode(value: String) {
-    _uiState.update { it.copy(securityCode = value.filter(Char::isDigit).take(8)) }
+    _uiState.update { it.copy(securityCode = value.filter(Char::isDigit).take(8), authErrorMessage = null) }
   }
 
   fun sendSecurityCode() {
     val phone = uiState.value.phone
     if (!phone.matches(Regex("1\\d{10}"))) {
+      _uiState.update { it.copy(authErrorMessage = "请输入正确的 11 位手机号") }
       showMessage("请输入 11 位手机号")
       return
     }
+    _uiState.update { it.copy(authErrorMessage = null) }
     launchRequest {
       api.sendSecurityCode(phone)
       showMessage("验证码已发送")
@@ -79,9 +82,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val phone = uiState.value.phone
     val code = uiState.value.securityCode
     if (!phone.matches(Regex("1\\d{10}")) || code.isBlank()) {
+      _uiState.update { it.copy(authErrorMessage = "请输入正确的手机号和短信验证码") }
       showMessage("请输入手机号和短信验证码")
       return
     }
+    _uiState.update { it.copy(authErrorMessage = null) }
     launchRequest {
       val session = api.login(phone, code)
       configuration =
@@ -96,6 +101,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(
           loggedIn = true,
           securityCode = "",
+          authErrorMessage = null,
           selectedDoorId = null,
         )
       }
@@ -227,7 +233,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
       }
       DoorWidgetProvider.updateAll(getApplication())
     }
-    showMessage(error.message?.takeIf(String::isNotBlank) ?: "请求失败")
+    val message = error.message?.takeIf(String::isNotBlank) ?: "请求失败"
+    _uiState.update { current ->
+      if (current.loggedIn) current else current.copy(authErrorMessage = message)
+    }
+    showMessage(message)
   }
 
   private fun showMessage(message: String) {
