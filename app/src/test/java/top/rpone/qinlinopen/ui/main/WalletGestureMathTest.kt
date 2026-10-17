@@ -86,6 +86,49 @@ class WalletGestureMathTest {
   }
 
   @Test
+  fun interruptingReturnSpringWithTinyDragDoesNotSelectAgain() {
+    // The previous spring was still 120px left of center. New gesture moves
+    // only 12px right, so inherited displacement cannot select another door.
+    assertEquals(
+      0,
+      walletSwipeDirection(
+        distancePx = -108f, velocityPxPerSecond = 150f,
+        distanceThresholdPx = 72f, velocityThresholdPxPerSecond = 900f,
+        canSwipePrevious = true, canSwipeNext = true,
+        gestureStartOffsetPx = -120f,
+      ),
+    )
+  }
+
+  @Test
+  fun interruptedSpringQualifiesOnlyFreshGestureDirection() {
+    // Return spring is at -120px, new gesture travels 80px to the right.
+    // Absolute offset is still negative; the user requested the PREVIOUS key.
+    assertEquals(
+      -1,
+      walletSwipeDirection(
+        distancePx = -40f, velocityPxPerSecond = 120f,
+        distanceThresholdPx = 72f, velocityThresholdPxPerSecond = 900f,
+        canSwipePrevious = true, canSwipeNext = true,
+        gestureStartOffsetPx = -120f,
+      ),
+    )
+  }
+
+  @Test
+  fun shortDragAfterInterruptStillHonorsReleaseVelocity() {
+    assertEquals(
+      1,
+      walletSwipeDirection(
+        distancePx = 70f, velocityPxPerSecond = -1450f,
+        distanceThresholdPx = 72f, velocityThresholdPxPerSecond = 900f,
+        canSwipePrevious = true, canSwipeNext = true,
+        gestureStartOffsetPx = 110f,
+      ),
+    )
+  }
+
+  @Test
   fun smallSlowGestureDoesNotSwitch() {
     assertEquals(0, walletSwipeDirection(35f, 350f, 72f, 900f, true, true))
   }
