@@ -107,3 +107,34 @@ internal fun walletSwipeDirection(
     else -> 0
   }
 }
+
+/**
+ * The main card switches its selected key before the return spring starts.
+ * Selection is synchronous but Compose's captured reachability flags still
+ * describe the SOURCE key until the next recomposition. Do not allow that
+ * stale reachability to launch a spring outward from the DESTINATION endpoint.
+ *
+ * Direction: +1 => next key, -1 => previous key, 0 => no key change.
+ * All velocities are px/s; callers convert the max from dp/s first.
+ */
+internal fun walletSettlingVelocity(
+  releaseVelocityPxPerSecond: Float,
+  maxVelocityPxPerSecond: Float,
+  swipeDirection: Int,
+  canSwipePrevious: Boolean,
+  canSwipeNext: Boolean,
+  previousKeyIsFirst: Boolean,
+  nextKeyIsLast: Boolean,
+): Float {
+  val outwardOnSource =
+    (releaseVelocityPxPerSecond > 0f && !canSwipePrevious) ||
+      (releaseVelocityPxPerSecond < 0f && !canSwipeNext)
+  val outwardOnDestination =
+    (swipeDirection == 1 && nextKeyIsLast && releaseVelocityPxPerSecond < 0f) ||
+      (swipeDirection == -1 && previousKeyIsFirst && releaseVelocityPxPerSecond > 0f)
+  if (outwardOnSource || outwardOnDestination) return 0f
+  return releaseVelocityPxPerSecond.coerceIn(
+    -maxVelocityPxPerSecond,
+    maxVelocityPxPerSecond,
+  )
+}
