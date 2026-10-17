@@ -17,6 +17,7 @@ import java.util.concurrent.Executors
 import top.rpone.qinlinopen.R
 import top.rpone.qinlinopen.data.QinlinApi
 import top.rpone.qinlinopen.data.SecureStore
+import top.rpone.qinlinopen.data.openAndRememberSuccessfulDoor
 
 private enum class WidgetVisual(val iconRes: Int?) {
   Normal(R.drawable.ic_lock_open),
@@ -69,7 +70,11 @@ class DoorWidgetProvider : AppWidgetProvider() {
           val store = SecureStore(context)
           val configuration = store.load() ?: error("请先登录")
           val key = store.loadWidgetKey(appWidgetId) ?: error("请选择钥匙")
-          QinlinApi(context).openDoor(configuration.sessionId, key)
+          openAndRememberSuccessfulDoor(
+            stableId = key.stableId,
+            open = { QinlinApi(context).openDoor(configuration.sessionId, key) },
+            remember = store::saveLastOpenedDoorId,
+          )
         }
       Handler(Looper.getMainLooper()).post {
         if (result.isSuccess) {
