@@ -128,3 +128,10 @@ Codex 在 `fd8bee9` 版本发现 4 项 P2：
 2. **测试依赖模拟器动画系统配置**：`MainScreen` 内部 Composable 增加默认值为 `null` 的 `motionEnabledOverride` 测试注入接口，生产版本始终读取 Android 的动画偏好；手势仪器测试指定启用，新增关闭动画时正常点击开门的测试，从而使测试与 CI 设备 `ANIMATOR_DURATION_SCALE` 无关。
 
 当前阶段累计 `WalletGestureMathTest.kt` 12 项 JUnit 测试，Android 仪器测试新增关闭动效的可用性检查。纯 JVM 辅助函数可用 Kotlin CLI 单独检查；Compose/Android 构建与 OPPO 120Hz 真机指标仍然**未验收**。继续在同一 PR #3 修复并复审，不更改 `main`。
+
+### PR #3 · Codex 第三轮审查修复（2026-10-17）
+
+- **P2：切换到首尾钥匙后，中断弹簧导致卡片瞬移**。此前 `rawDragPx` 继承上一把钥匙未归零的偏移；切换成新钥匙后，`canSwipePrevious/canSwipeNext` 边界规则发生变化，下一次触摸的首帧却用**新边界的阻尼函数重新映射旧位移**，可能把例如 -120px 突然变成接近 -14px。
+- **修复**：在 `WalletMotion.kt` 中分离视觉位移 `offsetPx`、本次按下时视觉起点 `dragStartVisiblePx` 与本次累计手势距离 `gestureTravelPx`。按下时保留**实际屏幕位置**；本次拖动使用 `walletDragFromVisibleBaseline(startVisiblePx, gestureTravelPx, ...)`，仅对**新增手指移动**施加新钥匙的越界阻力；松手后直接对视觉空间 `offsetPx` 做弹簧回到 0，不再让新旧邻居边界的阻尼曲线重新映射弹簧位置。
+- 结果：新手势位移也不再包含历史弹簧偏移；选中末把或首把钥匙时仍可在中途按住并继续流畅滑动；原有首尾边缘阻力及滑动阈值逻辑均保留。
+- **测试**：`WalletGestureMathTest.kt` 现在有 **15 个 JUnit 回归用例**（已提交，尚未在 Android Gradle 下执行）；当前环境使用 `kotlinc` + JVM 运行包含本次边界情况在内的 **14 项独立算法 smoke 检查，14/14 通过**。Android UI、真机 120Hz 与门禁网络操作仍未测试。
