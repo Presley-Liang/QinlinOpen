@@ -7,8 +7,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -113,6 +116,49 @@ class MainScreenTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithText("完成排序").assertDoesNotExist()
     composeTestRule.onNodeWithText("当前没有可用钥匙").assertExists()
+  }
+
+  @Test
+  fun swipingMainCardSelectsAdjacentKeyWithoutOpening() {
+    val first = DoorKey("1", "示例小区", "2", "东门")
+    val second = DoorKey("1", "示例小区", "3", "西门")
+    var selected by mutableStateOf(first.stableId)
+    var opened: DoorKey? = null
+    composeTestRule.setContent {
+      MainScreen(
+        state = MainScreenUiState(loggedIn = true, doors = listOf(first, second), selectedDoorId = selected),
+        onPhoneChange = {}, onCodeChange = {}, onSendCode = {}, onLogin = {},
+        onRefresh = {}, onOpenDoor = { opened = it }, onSelectDoor = { selected = it },
+        onMoveDoor = { _, _ -> }, onDoorOrderChanged = {}, onLogout = {},
+      )
+    }
+
+    composeTestRule.onNodeWithTag("wallet-main-card").performTouchInput { swipeLeft() }
+    composeTestRule.runOnIdle {
+      assertEquals(second.stableId, selected)
+      assertNull(opened)
+    }
+  }
+
+  @Test
+  fun openingFailureShowsRetryFeedbackOnSelectedCardOnly() {
+    val first = DoorKey("1", "示例小区", "2", "东门")
+    val second = DoorKey("1", "示例小区", "3", "西门")
+    composeTestRule.setContent {
+      MainScreen(
+        state = MainScreenUiState(
+          loggedIn = true, doors = listOf(first, second),
+          selectedDoorId = first.stableId,
+          failedDoorId = first.stableId,
+          doorErrorMessage = "网络连接超时",
+        ),
+        onPhoneChange = {}, onCodeChange = {}, onSendCode = {}, onLogin = {},
+        onRefresh = {}, onOpenDoor = {}, onSelectDoor = {},
+        onMoveDoor = { _, _ -> }, onDoorOrderChanged = {}, onLogout = {},
+      )
+    }
+    composeTestRule.onNodeWithText("请求失败，请轻点卡片重试").assertExists()
+    composeTestRule.onNodeWithText("网络连接超时").assertExists()
   }
 
 }
