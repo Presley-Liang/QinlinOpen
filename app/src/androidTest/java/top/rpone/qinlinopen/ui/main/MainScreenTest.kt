@@ -130,6 +130,7 @@ class MainScreenTest {
         onPhoneChange = {}, onCodeChange = {}, onSendCode = {}, onLogin = {},
         onRefresh = {}, onOpenDoor = { opened = it }, onSelectDoor = { selected = it },
         onMoveDoor = { _, _ -> }, onDoorOrderChanged = {}, onLogout = {},
+        motionEnabledOverride = true, // Independent of CI/emulator animator settings.
       )
     }
 
@@ -138,6 +139,23 @@ class MainScreenTest {
       assertEquals(second.stableId, selected)
       assertNull(opened)
     }
+  }
+
+  @Test
+  fun tappingStillOpensWhenAnimationsAreDisabled() {
+    val key = DoorKey("1", "示例小区", "2", "东门")
+    var opened: DoorKey? = null
+    composeTestRule.setContent {
+      MainScreen(
+        state = MainScreenUiState(loggedIn = true, doors = listOf(key)),
+        onPhoneChange = {}, onCodeChange = {}, onSendCode = {}, onLogin = {},
+        onRefresh = {}, onOpenDoor = { opened = it }, onSelectDoor = {},
+        onMoveDoor = { _, _ -> }, onDoorOrderChanged = {}, onLogout = {},
+        motionEnabledOverride = false,
+      )
+    }
+    composeTestRule.onNodeWithTag("wallet-main-card").performClick()
+    composeTestRule.runOnIdle { assertEquals(key, opened) }
   }
 
   @Test
