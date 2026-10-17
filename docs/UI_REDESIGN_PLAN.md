@@ -31,13 +31,13 @@
 | 阶段 | 分支 | 可交付内容 | 进度 |
 | --- | --- | --- | --- |
 | 01 | `feat/moonlight-foundation` | 固定深浅品牌色、显示名称、独立安装 ID、设计约束 | **已合并进 main（merge SHA `6761a47`），Android 构建仍待验证** |
-| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已提交 PR #2，修复复审 P2，待再审查** |
-| 03 | `feat/wallet-motion-feedback` | 1:1 手势、速度继承、可中断弹簧、成功/失败动画与反馈 | 未开始 |
+| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已通过 Codex 复审并合入 main（merge SHA `1b2c811`），尚待 Android 真机验收** |
+| 03 | `feat/wallet-motion-feedback` | 可中断弹簧、指尖拖动、液态玻璃风格材质、触觉及失败反馈 | **已实现待 PR 审查，120Hz 未验收** |
 | 04 | `feat/login-settings` | 登录页、必要设置和错误视图 | 未开始 |
 | 05 | `feat/wallet-widgets-icon` | 桌面组件多尺寸、图标、完整文案 | 未开始 |
 | 06 | `test/wallet-regressions` | 自动测试、打包和设备验收支持 | 未开始 |
 
-PR #1 经 Codex 复审后已按用户明确授权，通过 merge commit 合入 `main`。PR #2 历史上从 PR #1 分支创建，现在目标已改成 `main`；继续通过 PR 审核后再合入，避免直接修改 `main`。
+PR #1 与 PR #2 都已通过 Codex 复审并经用户授权分别合并到 `main`。PR #3 从合并后的最新 `main` 创建，仍保持一项功能一个 PR、审核后再合并的工作流。
 
 ## 验收分级
 
@@ -84,3 +84,25 @@ PR #1 经 Codex 复审后已按用户明确授权，通过 merge commit 合入 `
 - **已验证**：从改动后的辅助函数复制相同源码到本地，Kotlin CLI 编译并用无 Android 依赖的独立 smoke runner 验证 4/4 场景通过；不等同于已运行仓库的 JUnit 或 Android Gradle 测试。
 - **未验证**：Android SDK/Compose 编译、真实桌面小组件请求、设备上最近钥匙同步以及 120Hz 性能仍需后续实际验收。
 - PR #1 已合并（merge commit `6761a47`）；PR #2 base 已切换到 `main`，本次修复继续在原 `feat/wallet-door-stack` 分支提交，不创建重复 PR。
+
+### 阶段 03：Apple Design 动效实现与验证范围（2026-10-17）
+
+- 新增 `WalletMotion.kt`，为前景卡和候选钥匙卡添加按压即时反馈、原生 Compose `spring`、可中断的过渡；以 `Modifier.draggable` 直接追踪手指水平移动，放手时将速度交给 `animate` spring。方向滑动仅更换钥匙，**绝不触发开门 API**；点击前景卡时才请求开门，并增加拖动后一小段时间的误触保护。
+- 选中其他钥匙后以原生 `animateScrollToItem` 将用户引回可点击的主卡；系统关闭动画时滚动立即完成。
+- 使用月光银层叠渐变、半透明高光与玻璃边界线，避免全屏反复模糊导致 120Hz 掉帧。**技术限制**：并非 iOS 的真实光线折射或 Android 上实时全场景 backdrop blur；此阶段提供经过性能取舍的 *Liquid Glass 风格*视觉。
+- 开门请求发出与服务器确认成功时产生不同视觉反馈；成功时触觉反馈；失败/超时展示**可阅读的异常原因**，由用户主动再次点击重试，不自动重复执行门禁动作。
+- 主动读取 Android 的 `Settings.Global.ANIMATOR_DURATION_SCALE`；关闭系统动画时不执行本地卡片弹簧/拖动动效，仍保留普通点击功能与文本反馈。
+- 新增 Android Compose 仪器用例：滑动前景卡只切换、绝不发送开门请求；请求失败显示手动重试提示。
+- 保持 `QinlinApi`、`SecureStore`、`DoorWidgetProvider`、登录流程和门禁实际认证协议不变。
+
+#### 设备验收（未完成）
+
+1. 在 OPPO Find X7 Ultra 上启用 120Hz，录制至少 10 次跨 4～10 把钥匙的快速往返滑动、交替点击及中途反向手势。
+2. 对比系统动画速度 1× 与关闭时的表现；检查点击是否误发门禁请求、按压是否立即响应。
+3. 使用 Android Studio System Trace / Perfetto 检查 frame timeline、主线程耗时、卡片切换掉帧；**未经测量不能声称稳定 120fps**。
+4. 验证服务端成功与门物理打开是两个不同概念；后台无授权/超时必须正常报错，绝不自动无限重试。
+
+#### 当前验证分级
+
+- 源码已写入第三阶段开发分支，可进行代码审查。
+- 静态验证验证导入/调用与未触及网络协议；尚未完成 Android Gradle 编译与真机测试。
