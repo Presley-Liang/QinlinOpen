@@ -106,3 +106,14 @@ PR #1 与 PR #2 都已通过 Codex 复审并经用户授权分别合并到 `main
 
 - 源码已写入第三阶段开发分支，可进行代码审查。
 - 静态验证验证导入/调用与未触及网络协议；尚未完成 Android Gradle 编译与真机测试。
+
+### PR #3 · Codex 第一轮审查修复（2026-10-17）
+
+Codex 在 `fd8bee9` 版本发现 4 项 P2：
+
+1. **系统减少动画设置更新不及时**：不再仅靠 `remember(context)` 读取一次动画设置。`walletMotionEnabled()` 现在注册 `ContentObserver`，并在 `Lifecycle.Event.ON_RESUME` 主动重读 `Settings.Global.ANIMATOR_DURATION_SCALE`；正确在 `DisposableEffect` 中注销，避免泄露。全屏只创建一份监听状态并下发给卡片；关闭动画还会停止并归零当前弹簧位置。
+2. **列表边缘滑出屏幕**：在最前和最后钥匙按方向启用阻尼，`walletDragOffset` 用渐进阻力把越界位移限制在 48dp 以内；有效方向仍然 1:1 跟随手指。不可到达的邻居不会被误选。
+3. **不同像素密度速度衰减不一致**：弹簧释放速度上限从固定 1800px/s 改为 `1800.dp.toPx()`；距离阈值、速度阈值与越界阻力均使用密度转换。
+4. **反向甩动误选**：只在位移本身超过 72dp 时采用位移方向；否则如果甩动速度超过 900dp/s，就按松手**速度**方向选择，覆盖此前 24～72dp 的反向偏移。抽出纯 Kotlin `walletSwipeDirection`，便于独立测试。
+
+新增 `WalletGestureMathTest.kt` 的 8 组 JUnit 回归用例（待 Android Gradle 执行）；独立 Kotlin CLI 编译 `WalletGestureMath.kt` 并执行 9 项 smoke 校验**通过**。尚未运行 Compose / Android APK 编译、仪器测试或 120Hz 真机测试；本条只说明算法辅助文件的 JVM 编译与运行验证。
