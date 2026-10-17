@@ -31,13 +31,13 @@
 | 阶段 | 分支 | 可交付内容 | 进度 |
 | --- | --- | --- | --- |
 | 01 | `feat/moonlight-foundation` | 固定深浅品牌色、显示名称、独立安装 ID、设计约束 | **已合并进 main（merge SHA `6761a47`），Android 构建仍待验证** |
-| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已提交 PR #2，修复复审 P2，待再审查** |
-| 03 | `feat/wallet-motion-feedback` | 1:1 手势、速度继承、可中断弹簧、成功/失败动画与反馈 | 未开始 |
+| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已通过 Codex 复审并合入 main（merge SHA `1b2c811`），尚待 Android 真机验收** |
+| 03 | `feat/wallet-motion-feedback` | 可中断弹簧、指尖拖动、液态玻璃风格材质、触觉及失败反馈 | **已实现待 PR 审查，120Hz 未验收** |
 | 04 | `feat/login-settings` | 登录页、必要设置和错误视图 | 未开始 |
 | 05 | `feat/wallet-widgets-icon` | 桌面组件多尺寸、图标、完整文案 | 未开始 |
 | 06 | `test/wallet-regressions` | 自动测试、打包和设备验收支持 | 未开始 |
 
-PR #1 经 Codex 复审后已按用户明确授权，通过 merge commit 合入 `main`。PR #2 历史上从 PR #1 分支创建，现在目标已改成 `main`；继续通过 PR 审核后再合入，避免直接修改 `main`。
+PR #1 与 PR #2 都已通过 Codex 复审并经用户授权分别合并到 `main`。PR #3 从合并后的最新 `main` 创建，仍保持一项功能一个 PR、审核后再合并的工作流。
 
 ## 验收分级
 
@@ -84,3 +84,69 @@ PR #1 经 Codex 复审后已按用户明确授权，通过 merge commit 合入 `
 - **已验证**：从改动后的辅助函数复制相同源码到本地，Kotlin CLI 编译并用无 Android 依赖的独立 smoke runner 验证 4/4 场景通过；不等同于已运行仓库的 JUnit 或 Android Gradle 测试。
 - **未验证**：Android SDK/Compose 编译、真实桌面小组件请求、设备上最近钥匙同步以及 120Hz 性能仍需后续实际验收。
 - PR #1 已合并（merge commit `6761a47`）；PR #2 base 已切换到 `main`，本次修复继续在原 `feat/wallet-door-stack` 分支提交，不创建重复 PR。
+
+### 阶段 03：Apple Design 动效实现与验证范围（2026-10-17）
+
+- 新增 `WalletMotion.kt`，为前景卡和候选钥匙卡添加按压即时反馈、原生 Compose `spring`、可中断的过渡；以 `Modifier.draggable` 直接追踪手指水平移动，放手时将速度交给 `animate` spring。方向滑动仅更换钥匙，**绝不触发开门 API**；点击前景卡时才请求开门，并增加拖动后一小段时间的误触保护。
+- 选中其他钥匙后以原生 `animateScrollToItem` 将用户引回可点击的主卡；系统关闭动画时滚动立即完成。
+- 使用月光银层叠渐变、半透明高光与玻璃边界线，避免全屏反复模糊导致 120Hz 掉帧。**技术限制**：并非 iOS 的真实光线折射或 Android 上实时全场景 backdrop blur；此阶段提供经过性能取舍的 *Liquid Glass 风格*视觉。
+- 开门请求发出与服务器确认成功时产生不同视觉反馈；成功时触觉反馈；失败/超时展示**可阅读的异常原因**，由用户主动再次点击重试，不自动重复执行门禁动作。
+- 主动读取 Android 的 `Settings.Global.ANIMATOR_DURATION_SCALE`；关闭系统动画时不执行本地卡片弹簧/拖动动效，仍保留普通点击功能与文本反馈。
+- 新增 Android Compose 仪器用例：滑动前景卡只切换、绝不发送开门请求；请求失败显示手动重试提示。
+- 保持 `QinlinApi`、`SecureStore`、`DoorWidgetProvider`、登录流程和门禁实际认证协议不变。
+
+#### 设备验收（未完成）
+
+1. 在 OPPO Find X7 Ultra 上启用 120Hz，录制至少 10 次跨 4～10 把钥匙的快速往返滑动、交替点击及中途反向手势。
+2. 对比系统动画速度 1× 与关闭时的表现；检查点击是否误发门禁请求、按压是否立即响应。
+3. 使用 Android Studio System Trace / Perfetto 检查 frame timeline、主线程耗时、卡片切换掉帧；**未经测量不能声称稳定 120fps**。
+4. 验证服务端成功与门物理打开是两个不同概念；后台无授权/超时必须正常报错，绝不自动无限重试。
+
+#### 当前验证分级
+
+- 源码已写入第三阶段开发分支，可进行代码审查。
+- 静态验证验证导入/调用与未触及网络协议；尚未完成 Android Gradle 编译与真机测试。
+
+### PR #3 · Codex 第一轮审查修复（2026-10-17）
+
+Codex 在 `fd8bee9` 版本发现 4 项 P2：
+
+1. **系统减少动画设置更新不及时**：不再仅靠 `remember(context)` 读取一次动画设置。`walletMotionEnabled()` 现在注册 `ContentObserver`，并在 `Lifecycle.Event.ON_RESUME` 主动重读 `Settings.Global.ANIMATOR_DURATION_SCALE`；正确在 `DisposableEffect` 中注销，避免泄露。全屏只创建一份监听状态并下发给卡片；关闭动画还会停止并归零当前弹簧位置。
+2. **列表边缘滑出屏幕**：在最前和最后钥匙按方向启用阻尼，`walletDragOffset` 用渐进阻力把越界位移限制在 48dp 以内；有效方向仍然 1:1 跟随手指。不可到达的邻居不会被误选。
+3. **不同像素密度速度衰减不一致**：弹簧释放速度上限从固定 1800px/s 改为 `1800.dp.toPx()`；距离阈值、速度阈值与越界阻力均使用密度转换。
+4. **反向甩动误选**：只在位移本身超过 72dp 时采用位移方向；否则如果甩动速度超过 900dp/s，就按松手**速度**方向选择，覆盖此前 24～72dp 的反向偏移。抽出纯 Kotlin `walletSwipeDirection`，便于独立测试。
+
+新增 `WalletGestureMathTest.kt` 的 9 组 JUnit 回归用例（待 Android Gradle 执行）；独立 Kotlin CLI 编译 `WalletGestureMath.kt` 并执行 9 项 smoke 校验**通过**。尚未运行 Compose / Android APK 编译、仪器测试或 120Hz 真机测试；本条只说明算法辅助文件的 JVM 编译与运行验证。
+
+- **额外连续性修复**：越界阻尼后的弹簧释放直接动画化**原始手势位移**，每一帧再做一次阻尼映射，避免把已阻尼的位移重复阻尼造成放手瞬间跳变；手指中途重新按下时仍从当前原始动画位置接管，补充对应测试。
+
+### PR #3 · Codex 第二轮审查修复（2026-10-17）
+
+本轮审查针对提交 `331832b` 新提出两条 P2：
+
+1. **中断上一轮弹簧时误切下一把钥匙**：界面继续沿用 `rawDragPx` 维持卡片连续的可见位置，但手势启动时另行记录 `dragStartRawPx`。新的滑动是否达到 72dp，改为仅看本次触摸行程 `rawDragPx - dragStartRawPx`；快速反向甩动仍依据本次松手速度，不把上一轮尚未回零的位移算作新的操作。用三项纯 Kotlin 回归用例覆盖中途再次按下、短拖不切换和相反方向长拖。
+2. **测试依赖模拟器动画系统配置**：`MainScreen` 内部 Composable 增加默认值为 `null` 的 `motionEnabledOverride` 测试注入接口，生产版本始终读取 Android 的动画偏好；手势仪器测试指定启用，新增关闭动画时正常点击开门的测试，从而使测试与 CI 设备 `ANIMATOR_DURATION_SCALE` 无关。
+
+当前阶段累计 `WalletGestureMathTest.kt` 12 项 JUnit 测试，Android 仪器测试新增关闭动效的可用性检查。纯 JVM 辅助函数可用 Kotlin CLI 单独检查；Compose/Android 构建与 OPPO 120Hz 真机指标仍然**未验收**。继续在同一 PR #3 修复并复审，不更改 `main`。
+
+### PR #3 · Codex 第三轮审查修复（2026-10-17）
+
+- **P2：切换到首尾钥匙后，中断弹簧导致卡片瞬移**。此前 `rawDragPx` 继承上一把钥匙未归零的偏移；切换成新钥匙后，`canSwipePrevious/canSwipeNext` 边界规则发生变化，下一次触摸的首帧却用**新边界的阻尼函数重新映射旧位移**，可能把例如 -120px 突然变成接近 -14px。
+- **修复**：在 `WalletMotion.kt` 中分离视觉位移 `offsetPx`、本次按下时视觉起点 `dragStartVisiblePx` 与本次累计手势距离 `gestureTravelPx`。按下时保留**实际屏幕位置**；本次拖动使用 `walletDragFromVisibleBaseline(startVisiblePx, gestureTravelPx, ...)`，仅对**新增手指移动**施加新钥匙的越界阻力；松手后直接对视觉空间 `offsetPx` 做弹簧回到 0，不再让新旧邻居边界的阻尼曲线重新映射弹簧位置。
+- 结果：新手势位移也不再包含历史弹簧偏移；选中末把或首把钥匙时仍可在中途按住并继续流畅滑动；原有首尾边缘阻力及滑动阈值逻辑均保留。
+- **测试**：`WalletGestureMathTest.kt` 现在有 **15 个 JUnit 回归用例**（已提交，尚未在 Android Gradle 下执行）；当前环境使用 `kotlinc` + JVM 运行包含本次边界情况在内的 **14 项独立算法 smoke 检查，14/14 通过**。Android UI、真机 120Hz 与门禁网络操作仍未测试。
+
+### PR #3 · Codex 第四轮审查修复（2026-10-17）
+
+- **P2：反复中断边缘回弹会累积每次 48dp 的阻尼额度**。前一版以视觉位移作为下一次手势的基线，但每次对新手势单独给予完整的 `limitPx`，导致连续多次外拖可以把同一把首/尾钥匙逐渐推到屏幕外。
+- **修复**：保留视觉坐标的连续性与「新手势独立判定」两项不变量，重新设计 `walletDragFromVisibleBaseline`：当手势朝不可达方向滑动，**只使用基线与 48dp 边界之间剩余的空间**计算渐进阻力；中断上一轮回弹不会重置额度。因切换钥匙继承了超出新边界的合法旧位移时，保留起点不瞬移，但不允许在该方向继续外推；向中心拖动始终 1:1 跟随，越过中心后再按另一端的边界规则处理。
+- 修订此前首/尾钥匙承接旧位移的预期（越界方向不再进一步移动），补充连续 20 次外拖在首/尾钥匙均不超过 48dp、越过中心对端阻尼、零位移无跳变等 4 项 JUnit 回归测试。纯 Kotlin 算法测试累计 **19 项 JUnit 源码用例**，待实际运行。
+- 在本地以 Kotlin CLI 编译同一组算法，并对 2318 项边缘和连续性属性做 JVM 断言，**2318/2318 通过**。这不是 Android SDK/Compose 编译、项目 JUnit/仪器测试或 OPPO 真机 120Hz 验收；这些仍需完成。
+
+### PR #3 · Codex 第五轮审查修复（2026-10-17）
+
+- **问题 P2**：从倒数第二把钥匙切换到最后一把（或第二把切换第一把）时，选择动作通过 `onSwipe` 已经改变了当前钥匙，但回弹速度仍只检查旧钥匙的 `canSwipePrevious` / `canSwipeNext`。向外甩动速度仍可能以高达 1800dp/s 继续推动新选中的端点卡片向屏幕外移动。
+- **根因**：选择变化、端点可达性以及回弹动画被分开计算，使用了切换之前的边界信息。这与前两轮「切换后不跳变」「重复中断不突破阻尼」问题同属边界状态连续性，**不是那两个问题的原有修复被回滚**。
+- **处理**：在主界面预先计算并传入 `previousKeyIsFirst` / `nextKeyIsLast`，把起始钥匙与目标钥匙的边界信息一起传给新的纯 Kotlin `walletSettlingVelocity()`。当滑动落在首尾端点并且释放速度指向新端点的不可达方向时，将初始外推速度置零；如果速度指向内侧，仍允许正常继承并以 dp/s 换算的上限进行裁剪。这样不会让新的弹簧瞬间对端点继续注入越界动量。
+- **回归用例**：增加 6 项 JUnit 测试覆盖两端点切换、两把钥匙、仍在端点、切换到中间钥匙保留正常速度、反向释放向内动量。加上先前 19 项，现累计 **25 项 JUnit 源码用例**。
+- **验证边界**：本次仅完成提交、静态检查和回归测试编写；Android Gradle/JUnit 仓库实际运行、Compose UI/真机 120Hz 尚待完成。
