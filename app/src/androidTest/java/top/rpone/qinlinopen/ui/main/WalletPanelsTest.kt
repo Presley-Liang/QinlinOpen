@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -36,8 +37,8 @@ class WalletPanelsTest {
     }
     rule.onNodeWithText("发送短信验证码").assertIsNotEnabled()
     rule.onNodeWithText("验证并获取我的钥匙").assertIsNotEnabled()
-    rule.onNodeWithText("手机号").performTextInput("13800138000")
-    rule.onNodeWithText("短信验证码").performTextInput("123456")
+    rule.onNodeWithTag("wallet-login-phone").performTextInput("13800138000")
+    rule.onNodeWithTag("wallet-login-code").performTextInput("123456")
     rule.onNodeWithText("发送短信验证码").assertIsEnabled().performClick()
     rule.onNodeWithText("验证并获取我的钥匙").assertIsEnabled().performClick()
     rule.runOnIdle {
