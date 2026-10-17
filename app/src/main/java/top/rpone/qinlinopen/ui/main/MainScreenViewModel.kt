@@ -8,6 +8,7 @@ import top.rpone.qinlinopen.data.QinlinApi
 import top.rpone.qinlinopen.data.QinlinApiException
 import top.rpone.qinlinopen.data.SavedConfiguration
 import top.rpone.qinlinopen.data.SecureStore
+import top.rpone.qinlinopen.data.openAndRememberSuccessfulDoor
 import top.rpone.qinlinopen.widget.DoorWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -121,9 +122,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(busy = true, openingDoorId = key.stableId, successfulDoorId = null)
       }
       try {
-        withContext(Dispatchers.IO) { api.openDoor(current.sessionId, key) }
-        // A failed preference write must never report an already-opened door as a failure.
-        withContext(Dispatchers.IO) { runCatching { store.saveLastOpenedDoorId(key.stableId) } }
+        withContext(Dispatchers.IO) {
+          openAndRememberSuccessfulDoor(
+            stableId = key.stableId,
+            open = { api.openDoor(current.sessionId, key) },
+            remember = store::saveLastOpenedDoorId,
+          )
+        }
         showMessage("开门成功")
         _uiState.update {
           it.copy(busy = false, openingDoorId = null, successfulDoorId = key.stableId, selectedDoorId = key.stableId)
