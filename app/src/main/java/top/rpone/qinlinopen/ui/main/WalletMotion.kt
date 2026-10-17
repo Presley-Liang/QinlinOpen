@@ -147,6 +147,9 @@ internal fun WalletMainCard(
   )
   var offsetPx by remember { mutableFloatStateOf(0f) }
   var rawDragPx by remember { mutableFloatStateOf(0f) }
+  // A new gesture starts wherever the previous spring was interrupted.
+  // Keep this independent of the drawing offset, which may be edge-resisted.
+  var dragStartRawPx by remember { mutableFloatStateOf(0f) }
   var settleJob by remember { mutableStateOf<Job?>(null) }
   var suppressOpenUntil by remember { mutableLongStateOf(0L) }
   val dragState = rememberDraggableState { delta ->
@@ -157,6 +160,7 @@ internal fun WalletMainCard(
     if (!motion) {
       settleJob?.cancel()
       rawDragPx = 0f
+      dragStartRawPx = 0f
       offsetPx = 0f
     }
   }
@@ -193,8 +197,9 @@ internal fun WalletMainCard(
         onDragStarted = {
           suppressOpenUntil = SystemClock.uptimeMillis() + 1_000L
           settleJob?.cancel()
-          // rawDragPx is updated on every spring frame, so canceling keeps the
-          // next gesture continuous without applying edge resistance twice.
+          // Visual continuity and selection qualification are deliberately separate:
+          // the inherited spring displacement cannot count as a new swipe.
+          dragStartRawPx = rawDragPx
         },
         onDragStopped = { velocity ->
           suppressOpenUntil = SystemClock.uptimeMillis() + 250L
@@ -203,6 +208,7 @@ internal fun WalletMainCard(
           // For a shorter gesture reversed at release, velocity determines direction.
           val direction = walletSwipeDirection(
             distancePx = rawDragPx,
+            gestureStartOffsetPx = dragStartRawPx,
             velocityPxPerSecond = velocity,
             distanceThresholdPx = switchDistance,
             velocityThresholdPxPerSecond = switchVelocity,
@@ -231,6 +237,7 @@ internal fun WalletMainCard(
               offsetPx = walletDragOffset(value, canSwipePrevious, canSwipeNext, edgeLimit)
             }
             rawDragPx = 0f
+            dragStartRawPx = 0f
             offsetPx = 0f
           }
         },
