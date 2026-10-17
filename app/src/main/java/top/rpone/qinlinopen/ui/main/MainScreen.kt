@@ -277,6 +277,8 @@ internal fun MainScreen(
             enabled = !state.busy,
             canSwipePrevious = selectedIndex > 0,
             canSwipeNext = selectedIndex < state.doors.lastIndex,
+            previousKeyIsFirst = selectedIndex == 1,
+            nextKeyIsLast = selectedIndex + 1 == state.doors.lastIndex,
             motionEnabled = motionEnabled,
             visual = when (selected.stableId) {
               state.openingDoorId -> DoorKeyVisual.Loading
