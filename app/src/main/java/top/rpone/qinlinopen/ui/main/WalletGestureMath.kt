@@ -26,8 +26,10 @@ internal fun walletDragOffset(
 
 /**
  * +1 is the next key (finger left), -1 the previous key (finger right).
- * The release velocity is decisive when distance did not reach its threshold,
- * particularly when a user reverses the gesture just before release.
+ * The release velocity is decisive when this gesture's traveled distance did
+ * not reach its threshold, particularly when a user reverses before release.
+ * The raw offset may include the previous interrupted spring; that inherited
+ * displacement must never qualify the newly started gesture.
  */
 internal fun walletSwipeDirection(
   distancePx: Float,
@@ -36,11 +38,13 @@ internal fun walletSwipeDirection(
   velocityThresholdPxPerSecond: Float,
   canSwipePrevious: Boolean,
   canSwipeNext: Boolean,
+  gestureStartOffsetPx: Float = 0f,
 ): Int {
+  val gestureTravelPx = distancePx - gestureStartOffsetPx
   val direction =
     when {
-      abs(distancePx) >= distanceThresholdPx ->
-        if (distancePx < 0f) 1 else -1
+      abs(gestureTravelPx) >= distanceThresholdPx ->
+        if (gestureTravelPx < 0f) 1 else -1
       abs(velocityPxPerSecond) >= velocityThresholdPxPerSecond ->
         if (velocityPxPerSecond < 0f) 1 else -1
       else -> 0
