@@ -1,5 +1,9 @@
 package top.rpone.qinlinopen.ui.main
 
+import android.content.Context
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.compose.animation.core.animate
@@ -32,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -55,29 +60,56 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import kotlin.math.abs
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import top.rpone.qinlinopen.R
 import top.rpone.qinlinopen.data.DoorKey
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * Respect the Android animator-duration-scale switch, including the 0x accessibility setting.
  * We intentionally use simple gradients instead of a backdrop RenderEffect: Android RenderEffect
  * blurs the composable's own layer, not reliably what lies behind it.
  */
+private fun readWalletAnimatorEnabled(context: Context): Boolean =
+  runCatching {
+    Settings.Global.getFloat(
+      context.contentResolver,
+      Settings.Global.ANIMATOR_DURATION_SCALE,
+      1f,
+    ) > 0f
+  }.getOrDefault(true)
+
 @Composable
 internal fun walletMotionEnabled(): Boolean {
   val context = LocalContext.current
-  return remember(context) {
-    runCatching {
-      Settings.Global.getFloat(
-        context.contentResolver,
-        Settings.Global.ANIMATOR_DURATION_SCALE,
-        1f,
-      ) > 0f
-    }.getOrDefault(true)
+  val owner = LocalLifecycleOwner.current
+  var enabled by remember(context) { mutableStateOf(readWalletAnimatorEnabled(context)) }
+
+  DisposableEffect(context, owner) {
+    val resolver = context.contentResolver
+    fun refresh() { enabled = readWalletAnimatorEnabled(context) }
+    val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+      override fun onChange(selfChange: Boolean) { refresh() }
+    }
+    val lifecycleObserver = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) refresh()
+    }
+    owner.lifecycle.addObserver(lifecycleObserver)
+    resolver.registerContentObserver(
+      Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE),
+      false,
+      observer,
+    )
+    refresh()
+    onDispose {
+      resolver.unregisterContentObserver(observer)
+      owner.lifecycle.removeObserver(lifecycleObserver)
+    }
   }
+  return enabled
 }
 
 @Composable
@@ -86,6 +118,9 @@ internal fun WalletMainCard(
   enabled: Boolean,
   visual: DoorKeyVisual,
   errorMessage: String? = null,
+  canSwipePrevious: Boolean,
+  canSwipeNext: Boolean,
+  motionEnabled: Boolean,
   onClick: () -> Unit,
   onSwipe: (Int) -> Unit,
 ) {
@@ -95,8 +130,9 @@ internal fun WalletMainCard(
   val density = LocalDensity.current
   val switchDistance = with(density) { 72.dp.toPx() }
   val switchVelocity = with(density) { 900.dp.toPx() }
-  val directionDistance = with(density) { 24.dp.toPx() }
-  val motion = walletMotionEnabled()
+  val maxSettleVelocity = with(density) { 1800.dp.toPx() }
+  val edgeLimit = with(density) { 48.dp.toPx() }
+  val motion = motionEnabled
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
   val scale by animateFloatAsState(
@@ -110,9 +146,20 @@ internal fun WalletMainCard(
     label = "wallet-success-settle",
   )
   var offsetPx by remember { mutableFloatStateOf(0f) }
+  var rawDragPx by remember { mutableFloatStateOf(0f) }
   var settleJob by remember { mutableStateOf<Job?>(null) }
   var suppressOpenUntil by remember { mutableLongStateOf(0L) }
-  val dragState = rememberDraggableState { delta -> offsetPx += delta }
+  val dragState = rememberDraggableState { delta ->
+    rawDragPx += delta
+    offsetPx = walletDragOffset(rawDragPx, canSwipePrevious, canSwipeNext, edgeLimit)
+  }
+  LaunchedEffect(motion) {
+    if (!motion) {
+      settleJob?.cancel()
+      rawDragPx = 0f
+      offsetPx = 0f
+    }
+  }
   LaunchedEffect(visual, key.stableId) {
     if (visual == DoorKeyVisual.Success) {
       haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -146,28 +193,44 @@ internal fun WalletMainCard(
         onDragStarted = {
           suppressOpenUntil = SystemClock.uptimeMillis() + 1_000L
           settleJob?.cancel()
+          // Continue from the actual visible offset if a spring was interrupted.
+          rawDragPx = offsetPx
         },
         onDragStopped = { velocity ->
           suppressOpenUntil = SystemClock.uptimeMillis() + 250L
           val oldOffset = offsetPx
-          // Swipe = select another key, never send an open-door request.
-          if (abs(oldOffset) > switchDistance || abs(velocity) > switchVelocity) {
-            val direction = if (abs(oldOffset) > directionDistance) oldOffset else velocity
-            onSwipe(if (direction < 0) 1 else -1)
+          // Distance wins only if it crossed the full selection threshold.
+          // For a shorter gesture reversed at release, velocity determines direction.
+          val direction = walletSwipeDirection(
+            distancePx = rawDragPx,
+            velocityPxPerSecond = velocity,
+            distanceThresholdPx = switchDistance,
+            velocityThresholdPxPerSecond = switchVelocity,
+            canSwipePrevious = canSwipePrevious,
+            canSwipeNext = canSwipeNext,
+          )
+          if (direction != 0) {
+            onSwipe(direction)
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
           }
+          val settlingVelocity =
+            if ((velocity > 0f && !canSwipePrevious) || (velocity < 0f && !canSwipeNext)) 0f
+            else velocity.coerceIn(-maxSettleVelocity, maxSettleVelocity)
           settleJob?.cancel()
           settleJob = scope.launch {
             animate(
               initialValue = oldOffset,
               targetValue = 0f,
-              initialVelocity = velocity.coerceIn(-1800f, 1800f),
+              initialVelocity = settlingVelocity,
               animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMediumLow,
               ),
-            ) { value, _ -> offsetPx = value }
+            ) { value, _ ->
+              offsetPx = walletDragOffset(value, canSwipePrevious, canSwipeNext, edgeLimit)
+            }
             offsetPx = 0f
+            rawDragPx = 0f
           }
         },
       ),
@@ -282,11 +345,12 @@ internal fun WalletOtherCard(
   key: DoorKey,
   index: Int,
   enabled: Boolean,
+  motionEnabled: Boolean,
   onClick: () -> Unit,
 ) {
   val colors = MaterialTheme.colorScheme
   val haptics = LocalHapticFeedback.current
-  val motion = walletMotionEnabled()
+  val motion = motionEnabled
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
   val scale by animateFloatAsState(
