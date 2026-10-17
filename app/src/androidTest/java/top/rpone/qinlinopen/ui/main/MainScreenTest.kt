@@ -93,7 +93,7 @@ class MainScreenTest {
     composeTestRule.runOnIdle { keys = listOf(first) }
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithText("完成排序").assertDoesNotExist()
-    composeTestRule.onNodeWithText("轻点卡片开门").assertIsDisplayed()
+    composeTestRule.onNodeWithText("轻点开门 · 左右滑动切换").assertIsDisplayed()
     composeTestRule.onNodeWithText("东门").performClick()
     composeTestRule.runOnIdle { assertEquals(first, opened) }
   }
