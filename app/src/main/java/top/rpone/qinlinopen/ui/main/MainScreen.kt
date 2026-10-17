@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +46,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -60,6 +62,7 @@ import androidx.navigation3.runtime.NavKey
 import kotlinx.coroutines.launch
 import top.rpone.qinlinopen.R
 import top.rpone.qinlinopen.data.DoorKey
+import top.rpone.qinlinopen.theme.rememberWalletUiSettings
 import top.rpone.qinlinopen.widget.DoorWidgetProvider
 
 @Suppress("UNUSED_PARAMETER")
@@ -113,8 +116,32 @@ internal fun MainScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   val reorderState = remember(listState) { DoorReorderState(listState) }
-  val motionEnabled = motionEnabledOverride ?: walletMotionEnabled()
+  val appearance = rememberWalletUiSettings()
+  val motionEnabled = motionEnabledOverride ?: (walletMotionEnabled() && !appearance.reducedMotion)
   var ordering by remember { mutableStateOf(false) }
+  var showSettings by rememberSaveable { mutableStateOf(false) }
+  BackHandler(enabled = showSettings) { showSettings = false }
+  LaunchedEffect(state.loggedIn) {
+    if (!state.loggedIn) showSettings = false
+  }
+  if (state.loggedIn && showSettings) {
+    WalletSettingsPage(
+      state = state,
+      selectedTheme = appearance.themeChoice,
+      reducedMotion = appearance.reducedMotion,
+      onThemeChange = appearance.onThemeChange,
+      onReducedMotionChange = appearance.onReducedMotionChange,
+      onBack = { showSettings = false },
+      onRefresh = onRefresh,
+      onReorder = {
+        showSettings = false
+        ordering = true
+      },
+      onLogout = onLogout,
+      modifier = modifier,
+    )
+    return
+  }
   // Refreshing to <=1 key or changing accounts must never trap the screen in sort mode.
   LaunchedEffect(state.loggedIn, state.doors.size) {
     if (!state.loggedIn || state.doors.size <= 1) ordering = false
@@ -130,42 +157,13 @@ internal fun MainScreen(
 
     if (!state.loggedIn) {
       item {
-        Text("登录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-      }
-      item {
-        OutlinedTextField(
-          value = state.phone,
-          onValueChange = onPhoneChange,
-          modifier = Modifier.fillMaxWidth(),
-          enabled = !state.busy,
-          label = { Text("手机号") },
-          keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-          singleLine = true,
+        WalletLoginPanel(
+          state = state,
+          onPhoneChange = onPhoneChange,
+          onCodeChange = onCodeChange,
+          onSendCode = onSendCode,
+          onLogin = onLogin,
         )
-      }
-      item {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-          OutlinedTextField(
-            value = state.securityCode,
-            onValueChange = onCodeChange,
-            modifier = Modifier.weight(1f),
-            enabled = !state.busy,
-            label = { Text("短信验证码") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            singleLine = true,
-          )
-          Spacer(Modifier.width(8.dp))
-          OutlinedButton(onClick = onSendCode, enabled = !state.busy) { Text("发送") }
-        }
-      }
-      item {
-        Button(
-          onClick = onLogin,
-          modifier = Modifier.fillMaxWidth().height(52.dp),
-          enabled = !state.busy,
-        ) {
-          Text("登录并读取钥匙")
-        }
       }
     } else {
       item {
@@ -175,7 +173,10 @@ internal fun MainScreen(
           verticalAlignment = Alignment.CenterVertically,
         ) {
           Text("钥匙", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-          OutlinedButton(onClick = onRefresh, enabled = !state.busy) { Text("刷新") }
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onRefresh, enabled = !state.busy) { Text("刷新") }
+            OutlinedButton(onClick = { showSettings = true }, enabled = !state.busy) { Text("设置") }
+          }
         }
       }
 
@@ -378,7 +379,11 @@ internal fun MainScreen(
       item {
         HorizontalDivider()
         Spacer(Modifier.height(4.dp))
-        OutlinedButton(onClick = onLogout, enabled = !state.busy) { Text("退出登录") }
+        Text(
+          "账号与外观设置可在右上角「设置」中管理",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
       }
     }
 
