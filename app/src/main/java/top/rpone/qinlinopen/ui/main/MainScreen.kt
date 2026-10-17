@@ -106,12 +106,14 @@ internal fun MainScreen(
   onDoorOrderChanged: () -> Unit,
   onLogout: () -> Unit,
   modifier: Modifier = Modifier,
+  // Injected only by Compose tests; production always honors Android's motion setting.
+  motionEnabledOverride: Boolean? = null,
 ) {
   val context = LocalContext.current
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   val reorderState = remember(listState) { DoorReorderState(listState) }
-  val motionEnabled = walletMotionEnabled()
+  val motionEnabled = motionEnabledOverride ?: walletMotionEnabled()
   var ordering by remember { mutableStateOf(false) }
   // Refreshing to <=1 key or changing accounts must never trap the screen in sort mode.
   LaunchedEffect(state.loggedIn, state.doors.size) {
