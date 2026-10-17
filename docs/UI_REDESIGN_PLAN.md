@@ -33,7 +33,7 @@
 | 01 | `feat/moonlight-foundation` | 固定深浅品牌色、显示名称、独立安装 ID、设计约束 | **已合并进 main（merge SHA `6761a47`），Android 构建仍待验证** |
 | 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已通过 Codex 复审并合入 main（merge SHA `1b2c811`），尚待 Android 真机验收** |
 | 03 | `feat/wallet-motion-feedback` | 可中断弹簧、指尖拖动、液态玻璃风格材质、触觉及失败反馈 | **已实现待 PR 审查，120Hz 未验收** |
-| 04 | `feat/login-settings` | 登录页、必要设置和错误视图 | 未开始 |
+| 04 | `feat/login-settings` | 月光银短信登录、主题与动效偏好、账号/安全设置、错误视图 | **PR #4 已实现，待审查与 Android 验证** |
 | 05 | `feat/wallet-widgets-icon` | 桌面组件多尺寸、图标、完整文案 | 未开始 |
 | 06 | `test/wallet-regressions` | 自动测试、打包和设备验收支持 | 未开始 |
 
@@ -150,3 +150,13 @@ Codex 在 `fd8bee9` 版本发现 4 项 P2：
 - **处理**：在主界面预先计算并传入 `previousKeyIsFirst` / `nextKeyIsLast`，把起始钥匙与目标钥匙的边界信息一起传给新的纯 Kotlin `walletSettlingVelocity()`。当滑动落在首尾端点并且释放速度指向新端点的不可达方向时，将初始外推速度置零；如果速度指向内侧，仍允许正常继承并以 dp/s 换算的上限进行裁剪。这样不会让新的弹簧瞬间对端点继续注入越界动量。
 - **回归用例**：增加 6 项 JUnit 测试覆盖两端点切换、两把钥匙、仍在端点、切换到中间钥匙保留正常速度、反向释放向内动量。加上先前 19 项，现累计 **25 项 JUnit 源码用例**。
 - **验证边界**：本次仅完成提交、静态检查和回归测试编写；Android Gradle/JUnit 仓库实际运行、Compose UI/真机 120Hz 尚待完成。
+
+### 阶段 04 · 登录页与设置（2026-10-17）
+
+**开发策略**：经用户确认，PR #3 的 Apple Design 动效边缘表现先冻结于待测版本，不再为了零边界瑕疵阻塞后续界面开发；这不代表 Android 编译或真机开门已经通过，涉及真实请求与权限的部分仍需严格验收。PR #3 暂不合并，PR #4 是以 `feat/wallet-motion-feedback` 为 base 的**堆叠 PR**；当 PR #3 合入 main 后再将 PR #4 目标切换到 main，不能直接把 #4 合入 main。
+
+- **登录**：新增 `WalletLoginPanel` 月光银信息卡，保留原 `sendSecurityCode()`、`login()`、`QinlinApi`、`SecureStore` 及服务器权限校验；无效手机号或验证码缺失时本地禁用不合法请求。错误由 ViewModel 的 `authErrorMessage` 展示在表单内，修改输入会清除旧错误；短信与会话仍遵循原服务端逻辑，不增加模拟登录。
+- **设置**：登录后首页右上角进入「设置」，Android 返回键和「返回钥匙」都可退出；展示手机号尾号与授权钥匙数量；可使用原有刷新钥匙、进入原有排序模式、二次确认退出并清除本机安全信息。
+- **可用外观设置**：在 `MainActivity` 根主题中选择自动/浅色/深色；在卡片页面支持本地关闭额外弹簧动画，并保留单击开门。偏好存储在单独的普通 SharedPreferences，仅保存主题和动效 Boolean，**不保存会话/令牌/钥匙**；外观设置即使退出登录也会保留。
+- **新增测试**：`WalletPanelsTest` Android Compose 仪器测试覆盖无效输入不可提交、填写后回调、页面内错误、退出登录确认/取消；仍待实际运行。
+- **非本阶段**：桌面组件重新设计和图标属于 PR #5；系统/Compose 实际渲染、OPPO 120Hz、短信登录及真实开门测试属于 PR #6 的设备验收。没有 Android SDK 时不宣称构建通过。
