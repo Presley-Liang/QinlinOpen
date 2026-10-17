@@ -25,12 +25,15 @@ internal fun walletDragOffset(
 }
 
 /**
- * Preserve the exact visible position at the start of a new drag, even when
- * the selected key changed while a previous spring was still returning.
+ * Preserve the actual displayed position when interrupting a return spring.
  *
- * Resistance applies only to the CURRENT gesture's additional travel. If an
- * inherited -120 px was legal for the previous key but is now out of bounds for
- * the new key, remapping the entire -120 px would cause an instant jump.
+ * A repeated drag at the same boundary must not earn a fresh 48dp allowance:
+ * use only the headroom left between the inherited offset and [limitPx].
+ *
+ * If a key change made an inherited offset exceed the new key's boundary,
+ * keep that visible position continuous and block *additional* outward travel.
+ * Inward travel follows the finger 1:1 until crossing zero, where the opposite
+ * edge (if unavailable) becomes elastically resisted.
  */
 internal fun walletDragFromVisibleBaseline(
   startVisiblePx: Float,
@@ -38,13 +41,40 @@ internal fun walletDragFromVisibleBaseline(
   canSwipePrevious: Boolean,
   canSwipeNext: Boolean,
   limitPx: Float,
-): Float =
-  startVisiblePx + walletDragOffset(
-    gestureTravelPx,
-    canSwipePrevious,
-    canSwipeNext,
-    limitPx,
-  )
+): Float {
+  val position = startVisiblePx + gestureTravelPx
+
+  if (gestureTravelPx > 0f && !canSwipePrevious) {
+    if (startVisiblePx >= 0f) {
+      val headroom = (limitPx - startVisiblePx).coerceAtLeast(0f)
+      return if (headroom > 0f) {
+        startVisiblePx + headroom * gestureTravelPx / (headroom + gestureTravelPx)
+      } else {
+        startVisiblePx // Key handoff may have inherited a larger offset.
+      }
+    }
+    if (position > 0f) {
+      return walletDragOffset(position, canSwipePrevious, canSwipeNext, limitPx)
+    }
+  }
+
+  if (gestureTravelPx < 0f && !canSwipeNext) {
+    if (startVisiblePx <= 0f) {
+      val headroom = (limitPx + startVisiblePx).coerceAtLeast(0f)
+      val distance = -gestureTravelPx
+      return if (headroom > 0f) {
+        startVisiblePx - headroom * distance / (headroom + distance)
+      } else {
+        startVisiblePx // No additional travel beyond an inherited endpoint.
+      }
+    }
+    if (position < 0f) {
+      return walletDragOffset(position, canSwipePrevious, canSwipeNext, limitPx)
+    }
+  }
+
+  return position
+}
 
 /**
  * +1 is the next key (finger left), -1 the previous key (finger right).
