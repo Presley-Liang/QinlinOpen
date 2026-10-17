@@ -1,7 +1,8 @@
 package top.rpone.qinlinopen.ui.main
 
+import android.os.SystemClock
 import android.provider.Settings
-import androidx.compose.animation.animate
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -34,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -104,6 +106,7 @@ internal fun WalletMainCard(
   )
   var offsetPx by remember { mutableFloatStateOf(0f) }
   var settleJob by remember { mutableStateOf<Job?>(null) }
+  var suppressOpenUntil by remember { mutableLongStateOf(0L) }
   val dragState = rememberDraggableState { delta -> offsetPx += delta }
   LaunchedEffect(visual, key.stableId) {
     if (visual == DoorKeyVisual.Success) {
@@ -115,7 +118,7 @@ internal fun WalletMainCard(
 
   Card(
     onClick = {
-      if (enabled) {
+      if (enabled && SystemClock.uptimeMillis() >= suppressOpenUntil) {
         haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
         onClick()
       }
@@ -135,8 +138,12 @@ internal fun WalletMainCard(
         state = dragState,
         orientation = Orientation.Horizontal,
         enabled = enabled && motion,
-        onDragStarted = { settleJob?.cancel() },
+        onDragStarted = {
+          suppressOpenUntil = SystemClock.uptimeMillis() + 1_000L
+          settleJob?.cancel()
+        },
         onDragStopped = { velocity ->
+          suppressOpenUntil = SystemClock.uptimeMillis() + 250L
           val oldOffset = offsetPx
           // Swipe = select another key, never send an open-door request.
           if (abs(oldOffset) > 72f || abs(velocity) > 1000f) {
