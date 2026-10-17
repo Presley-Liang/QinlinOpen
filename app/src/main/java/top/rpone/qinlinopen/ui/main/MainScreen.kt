@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,7 +50,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -116,6 +116,10 @@ internal fun MainScreen(
   val coroutineScope = rememberCoroutineScope()
   val reorderState = remember(listState) { DoorReorderState(listState) }
   var ordering by remember { mutableStateOf(false) }
+  // Refreshing to <=1 key or changing accounts must never trap the screen in sort mode.
+  LaunchedEffect(state.loggedIn, state.doors.size) {
+    if (!state.loggedIn || state.doors.size <= 1) ordering = false
+  }
   LazyColumn(
     modifier = modifier.fillMaxSize(),
     state = listState,
@@ -179,7 +183,7 @@ internal fun MainScreen(
       item {
         OutlinedButton(
           onClick = { ordering = !ordering },
-          enabled = !state.busy && state.doors.size > 1,
+          enabled = !state.busy && (ordering || state.doors.size > 1),
         ) { Text(if (ordering) "完成排序" else "管理钥匙顺序") }
       }
 
@@ -292,7 +296,11 @@ internal fun MainScreen(
               key = key,
               index = index,
               enabled = !state.busy,
-              onClick = { onSelectDoor(key.stableId) },
+              onClick = {
+                onSelectDoor(key.stableId)
+                // Foreground card is always at index 3 in the logged-in wallet layout.
+                coroutineScope.launch { listState.scrollToItem(WALLET_MAIN_ITEM_INDEX) }
+              },
             )
           }
         }
@@ -423,12 +431,12 @@ private fun WalletMainCard(
   Card(
     onClick = onClick,
     enabled = enabled,
-    modifier = Modifier.fillMaxWidth().height(222.dp),
+    modifier = Modifier.fillMaxWidth().heightIn(min = 222.dp),
     shape = RoundedCornerShape(28.dp),
     colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
   ) {
     Box(
-      modifier = Modifier.fillMaxSize().background(
+      modifier = Modifier.fillMaxWidth().background(
         Brush.linearGradient(
           listOf(
             colors.surfaceContainerLowest,
@@ -439,7 +447,7 @@ private fun WalletMainCard(
       )
     ) {
       Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 222.dp).padding(24.dp),
         verticalArrangement = Arrangement.SpaceBetween,
       ) {
         Row(
@@ -534,12 +542,12 @@ private fun WalletOtherCard(
   Card(
     onClick = onClick,
     enabled = enabled,
-    modifier = Modifier.fillMaxWidth().padding(horizontal = ((index % 3) * 4).dp).height(72.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = ((index % 3) * 4).dp).heightIn(min = 72.dp),
     shape = RoundedCornerShape(22.dp),
     colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
   ) {
     Row(
-      modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
+      modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 20.dp, vertical = 12.dp),
       verticalAlignment = Alignment.CenterVertically,
     ) {
       Icon(
@@ -632,4 +640,5 @@ private class DoorReorderState(private val listState: LazyListState) {
   }
 }
 
+private const val WALLET_MAIN_ITEM_INDEX = 3
 private const val FIRST_DOOR_ITEM_INDEX = 4
