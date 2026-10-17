@@ -73,6 +73,16 @@ class SecureStore(context: Context) {
       .map(IndexedValue<DoorKey>::value)
   }
 
+  /** Last *successful* door request, not just the last highlighted card. */
+  fun loadLastOpenedDoorId(): String? {
+    val encrypted = preferences.getString(PREF_LAST_OPENED_DOOR, null) ?: return null
+    return runCatching { decrypt(encrypted).takeIf(String::isNotBlank) }.getOrNull()
+  }
+
+  fun saveLastOpenedDoorId(stableId: String) {
+    preferences.edit().putString(PREF_LAST_OPENED_DOOR, encrypt(stableId)).apply()
+  }
+
   fun saveDoorOrder(doors: List<DoorKey>) {
     val order = JSONArray()
     doors.forEach { order.put(it.stableId) }
@@ -165,6 +175,7 @@ class SecureStore(context: Context) {
   companion object {
     private const val PREF_CREDENTIALS = "credentials"
     private const val PREF_DOOR_ORDER = "door_order"
+    private const val PREF_LAST_OPENED_DOOR = "last_opened_door"
     private const val PREF_WIDGET_PREFIX = "widget_key_"
     private const val KEY_ALIAS = "qinlin_open_credentials_v1"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"
