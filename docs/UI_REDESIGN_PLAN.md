@@ -30,14 +30,14 @@
 
 | 阶段 | 分支 | 可交付内容 | 进度 |
 | --- | --- | --- | --- |
-| 01 | `feat/moonlight-foundation` | 固定深浅品牌色、显示名称、独立安装 ID、设计约束 | **Codex 复审无新问题，PR #1 尚未合并** |
-| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已实现，等待 PR #2 审查** |
+| 01 | `feat/moonlight-foundation` | 固定深浅品牌色、显示名称、独立安装 ID、设计约束 | **已合并进 main（merge SHA `6761a47`），Android 构建仍待验证** |
+| 02 | `feat/wallet-door-stack` | Wallet 卡片切换、前景点击开门、上次成功钥匙、空状态和手动排序入口 | **已提交 PR #2，修复复审 P2，待再审查** |
 | 03 | `feat/wallet-motion-feedback` | 1:1 手势、速度继承、可中断弹簧、成功/失败动画与反馈 | 未开始 |
 | 04 | `feat/login-settings` | 登录页、必要设置和错误视图 | 未开始 |
 | 05 | `feat/wallet-widgets-icon` | 桌面组件多尺寸、图标、完整文案 | 未开始 |
 | 06 | `test/wallet-regressions` | 自动测试、打包和设备验收支持 | 未开始 |
 
-正常情况下，每一阶段从**最新 `main`** 创建新分支并通过 PR 合并。因为 PR #1 已通过 Codex 复审但**用户尚未确认合并**，PR #2 暂采用堆叠方式：从 `feat/moonlight-foundation` 创建 `feat/wallet-door-stack`，PR #2 的 base 暂指向前者。待 PR #1 合并后，必须把 PR #2 的 base 切换到 `main`，再重新审查差异。整个过程不自动合并。
+PR #1 经 Codex 复审后已按用户明确授权，通过 merge commit 合入 `main`。PR #2 历史上从 PR #1 分支创建，现在目标已改成 `main`；继续通过 PR 审核后再合入，避免直接修改 `main`。
 
 ## 验收分级
 
@@ -75,3 +75,12 @@
 - **P2 选中钥匙不在可视区域**：非前景卡被选中后滚动 `LazyColumn` 到前景卡索引，确保随后能立即操作。真实的速度继承与可中断物理动画仍在 PR #3。
 - **验证说明**：已在 GitHub 检查代码结构/相对 PR #1 的差异，并新增回归用例；未执行 Android SDK 的 Gradle 编译、Android 仪器测试或真机开门测试。以上均不等同于通过真实使用验收。
 - **分支关系**：PR #2 基于 PR #1 分支。PR #1 未合并前不应把 PR #2 合并到 main。
+
+### 阶段 02：第二轮 Codex 问题修复（2026-10-17）
+
+- Codex P2：原实现仅在 App 内成功开门后保存 `last_opened_door`，遗漏从桌面小组件成功开门后更新最近钥匙，造成下次冷启动仍选中旧门。
+- 处理：新增共享 `data/DoorOpenHistory.kt`，主界面及 `DoorWidgetProvider` 共用 `openAndRememberSuccessfulDoor`。先执行原有网络开门，仅服务端成功后写入原 `SecureStore` 的 AES-GCM 加密偏好；开门失败不得覆盖最近钥匙，偏好写入失败也不能误报原本成功的开门为失败。
+- 新增 `DoorOpenHistoryTest.kt` 4 个回归场景：主界面成功、Widget 成功、服务端拒绝、Keystore 写入失败。
+- **已验证**：从改动后的辅助函数复制相同源码到本地，Kotlin CLI 编译并用无 Android 依赖的独立 smoke runner 验证 4/4 场景通过；不等同于已运行仓库的 JUnit 或 Android Gradle 测试。
+- **未验证**：Android SDK/Compose 编译、真实桌面小组件请求、设备上最近钥匙同步以及 120Hz 性能仍需后续实际验收。
+- PR #1 已合并（merge commit `6761a47`）；PR #2 base 已切换到 `main`，本次修复继续在原 `feat/wallet-door-stack` 分支提交，不创建重复 PR。
