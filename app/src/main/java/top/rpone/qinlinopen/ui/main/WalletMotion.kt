@@ -120,6 +120,8 @@ internal fun WalletMainCard(
   errorMessage: String? = null,
   canSwipePrevious: Boolean,
   canSwipeNext: Boolean,
+  previousKeyIsFirst: Boolean,
+  nextKeyIsLast: Boolean,
   motionEnabled: Boolean,
   onClick: () -> Unit,
   onSwipe: (Int) -> Unit,
@@ -225,9 +227,18 @@ internal fun WalletMainCard(
             onSwipe(direction)
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
           }
-          val settlingVelocity =
-            if ((velocity > 0f && !canSwipePrevious) || (velocity < 0f && !canSwipeNext)) 0f
-            else velocity.coerceIn(-maxSettleVelocity, maxSettleVelocity)
+          // onSwipe changes selection to a new key. The flags captured by this
+          // composable still describe the source key, so include the destination
+          // endpoint when deciding whether momentum may continue outward.
+          val settlingVelocity = walletSettlingVelocity(
+            releaseVelocityPxPerSecond = velocity,
+            maxVelocityPxPerSecond = maxSettleVelocity,
+            swipeDirection = direction,
+            canSwipePrevious = canSwipePrevious,
+            canSwipeNext = canSwipeNext,
+            previousKeyIsFirst = previousKeyIsFirst,
+            nextKeyIsLast = nextKeyIsLast,
+          )
           settleJob?.cancel()
           settleJob = scope.launch {
             animate(
