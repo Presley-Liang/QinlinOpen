@@ -129,6 +129,46 @@ class WalletGestureMathTest {
   }
 
   @Test
+  fun reachingLastKeyRetainsInheritedLeftOffsetOnNextDrag() {
+    // -120 px was legal on the old (penultimate) key. On the new last key,
+    // it is out of bounds, but the visual offset must not be remapped.
+    val inherited = -120f
+    val firstFrame = walletDragFromVisibleBaseline(inherited, 0f, true, false, 48f)
+    val firstOutwardMove = walletDragFromVisibleBaseline(inherited, -2f, true, false, 48f)
+    val inwardMove = walletDragFromVisibleBaseline(inherited, 30f, true, false, 48f)
+    assertEquals(inherited, firstFrame, 0.001f)
+    assertTrue(firstOutwardMove < inherited)
+    assertTrue(firstOutwardMove > inherited - 2f)
+    assertEquals(-90f, inwardMove, 0.001f)
+  }
+
+  @Test
+  fun reachingFirstKeyRetainsInheritedRightOffsetOnNextDrag() {
+    val inherited = 120f
+    val firstFrame = walletDragFromVisibleBaseline(inherited, 0f, false, true, 48f)
+    val firstOutwardMove = walletDragFromVisibleBaseline(inherited, 2f, false, true, 48f)
+    val inwardMove = walletDragFromVisibleBaseline(inherited, -30f, false, true, 48f)
+    assertEquals(inherited, firstFrame, 0.001f)
+    assertTrue(firstOutwardMove > inherited)
+    assertTrue(firstOutwardMove < inherited + 2f)
+    assertEquals(90f, inwardMove, 0.001f)
+  }
+
+  @Test
+  fun normalEdgeResistanceIsUnchangedWithoutInheritedOffset() {
+    assertEquals(
+      walletDragOffset(-200f, true, false, 48f),
+      walletDragFromVisibleBaseline(0f, -200f, true, false, 48f),
+      0.001f,
+    )
+    assertEquals(
+      walletDragOffset(200f, false, true, 48f),
+      walletDragFromVisibleBaseline(0f, 200f, false, true, 48f),
+      0.001f,
+    )
+  }
+
+  @Test
   fun smallSlowGestureDoesNotSwitch() {
     assertEquals(0, walletSwipeDirection(35f, 350f, 72f, 900f, true, true))
   }
