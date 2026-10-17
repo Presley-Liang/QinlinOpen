@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.testTag
@@ -91,6 +92,10 @@ internal fun WalletMainCard(
   val colors = MaterialTheme.colorScheme
   val haptics = LocalHapticFeedback.current
   val scope = rememberCoroutineScope()
+  val density = LocalDensity.current
+  val switchDistance = with(density) { 72.dp.toPx() }
+  val switchVelocity = with(density) { 900.dp.toPx() }
+  val directionDistance = with(density) { 24.dp.toPx() }
   val motion = walletMotionEnabled()
   val interaction = remember { MutableInteractionSource() }
   val pressed by interaction.collectIsPressedAsState()
@@ -146,8 +151,8 @@ internal fun WalletMainCard(
           suppressOpenUntil = SystemClock.uptimeMillis() + 250L
           val oldOffset = offsetPx
           // Swipe = select another key, never send an open-door request.
-          if (abs(oldOffset) > 72f || abs(velocity) > 1000f) {
-            val direction = if (abs(oldOffset) > 24f) oldOffset else velocity
+          if (abs(oldOffset) > switchDistance || abs(velocity) > switchVelocity) {
+            val direction = if (abs(oldOffset) > directionDistance) oldOffset else velocity
             onSwipe(if (direction < 0) 1 else -1)
             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
           }
