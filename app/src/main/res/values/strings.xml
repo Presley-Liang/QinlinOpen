@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">QinlinOpen</string>
+    <string name="app_name">我的钥匙</string>
     <string name="widget_action">一键开门</string>
     <string name="widget_description">一键开门</string>
     <string name="widget_unconfigured">选择钥匙</string>
