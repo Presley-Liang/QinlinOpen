@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,7 +80,7 @@ internal fun WalletLoginPanel(
       OutlinedTextField(
         value = state.phone,
         onValueChange = onPhoneChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("wallet-login-phone"),
         enabled = !state.busy,
         label = { Text("手机号") },
         supportingText = { Text("仅用于原有服务的账号验证") },
@@ -89,7 +90,7 @@ internal fun WalletLoginPanel(
       OutlinedTextField(
         value = state.securityCode,
         onValueChange = onCodeChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().testTag("wallet-login-code"),
         enabled = !state.busy,
         label = { Text("短信验证码") },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
