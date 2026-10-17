@@ -208,6 +208,99 @@ class WalletGestureMathTest {
   }
 
   @Test
+  fun swipingPenultimateToLastRemovesOutwardReleaseVelocity() {
+    assertEquals(
+      0f,
+      walletSettlingVelocity(
+        releaseVelocityPxPerSecond = -2500f,
+        maxVelocityPxPerSecond = 1800f,
+        swipeDirection = 1,
+        canSwipePrevious = true,
+        canSwipeNext = true,
+        previousKeyIsFirst = false,
+        nextKeyIsLast = true,
+      ),
+      0.001f,
+    )
+  }
+
+  @Test
+  fun swipingSecondToFirstRemovesOutwardReleaseVelocity() {
+    assertEquals(
+      0f,
+      walletSettlingVelocity(
+        releaseVelocityPxPerSecond = 2500f,
+        maxVelocityPxPerSecond = 1800f,
+        swipeDirection = -1,
+        canSwipePrevious = true,
+        canSwipeNext = true,
+        previousKeyIsFirst = true,
+        nextKeyIsLast = false,
+      ),
+      0.001f,
+    )
+  }
+
+  @Test
+  fun swipingToInteriorKeyKeepsCappedMomentum() {
+    assertEquals(
+      -1800f,
+      walletSettlingVelocity(-2800f, 1800f, 1, true, true, false, false),
+      0.001f,
+    )
+    assertEquals(
+      1500f,
+      walletSettlingVelocity(1500f, 1800f, -1, true, true, false, false),
+      0.001f,
+    )
+  }
+
+  @Test
+  fun swipingTowardEndpointWithInwardReleaseKeepsMomentum() {
+    // A long swipe can qualify by distance even when released in reverse.
+    // Only *outward* momentum should be removed at the destination boundary.
+    assertEquals(
+      700f,
+      walletSettlingVelocity(700f, 1800f, 1, true, true, false, true),
+      0.001f,
+    )
+    assertEquals(
+      -700f,
+      walletSettlingVelocity(-700f, 1800f, -1, true, true, true, false),
+      0.001f,
+    )
+  }
+
+  @Test
+  fun stayingOnEndpointStillDropsOutwardRelease() {
+    assertEquals(
+      0f,
+      walletSettlingVelocity(-1600f, 1800f, 0, true, false, false, false),
+      0.001f,
+    )
+    assertEquals(
+      0f,
+      walletSettlingVelocity(1600f, 1800f, 0, false, true, false, false),
+      0.001f,
+    )
+  }
+
+  @Test
+  fun twoKeyWalletDropsOutwardVelocityAtEitherDestination() {
+    // The source is always the opposite endpoint in a two-key wallet.
+    assertEquals(
+      0f,
+      walletSettlingVelocity(-2000f, 1800f, 1, false, true, false, true),
+      0.001f,
+    )
+    assertEquals(
+      0f,
+      walletSettlingVelocity(2000f, 1800f, -1, true, false, true, false),
+      0.001f,
+    )
+  }
+
+  @Test
   fun smallSlowGestureDoesNotSwitch() {
     assertEquals(0, walletSwipeDirection(35f, 350f, 72f, 900f, true, true))
   }
