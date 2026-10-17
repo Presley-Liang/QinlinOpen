@@ -267,11 +267,15 @@ internal fun MainScreen(
       } else {
         val selectedId = resolveSelectedDoorId(state.doors, state.selectedDoorId)
         val selected = state.doors.first { it.stableId == selectedId }
+        val selectedIndex = state.doors.indexOfFirst { it.stableId == selected.stableId }
         val others = state.doors.filterNot { it.stableId == selectedId }
         item {
           WalletMainCard(
             key = selected,
             enabled = !state.busy,
+            canSwipePrevious = selectedIndex > 0,
+            canSwipeNext = selectedIndex < state.doors.lastIndex,
+            motionEnabled = motionEnabled,
             visual = when (selected.stableId) {
               state.openingDoorId -> DoorKeyVisual.Loading
               state.successfulDoorId -> DoorKeyVisual.Success
@@ -305,6 +309,7 @@ internal fun MainScreen(
               key = key,
               index = index,
               enabled = !state.busy,
+              motionEnabled = motionEnabled,
               onClick = {
                 onSelectDoor(key.stableId)
                 // Foreground card is always at index 3 in the logged-in wallet layout.
