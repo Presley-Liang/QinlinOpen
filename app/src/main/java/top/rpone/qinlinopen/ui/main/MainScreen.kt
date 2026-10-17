@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
@@ -17,9 +18,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -27,6 +30,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -41,9 +45,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.zIndex
@@ -82,6 +88,7 @@ fun MainScreen(
     onLogin = viewModel::login,
     onRefresh = viewModel::refreshDoors,
     onOpenDoor = viewModel::openDoor,
+    onSelectDoor = viewModel::selectDoor,
     onMoveDoor = viewModel::moveDoor,
     onDoorOrderChanged = viewModel::persistDoorOrder,
     onLogout = viewModel::logout,
@@ -98,6 +105,7 @@ internal fun MainScreen(
   onLogin: () -> Unit,
   onRefresh: () -> Unit,
   onOpenDoor: (DoorKey) -> Unit,
+  onSelectDoor: (String) -> Unit,
   onMoveDoor: (Int, Int) -> Unit,
   onDoorOrderChanged: () -> Unit,
   onLogout: () -> Unit,
@@ -107,13 +115,18 @@ internal fun MainScreen(
   val listState = rememberLazyListState()
   val coroutineScope = rememberCoroutineScope()
   val reorderState = remember(listState) { DoorReorderState(listState) }
+  var ordering by remember { mutableStateOf(false) }
+  // Refreshing to <=1 key or changing accounts must never trap the screen in sort mode.
+  LaunchedEffect(state.loggedIn, state.doors.size) {
+    if (!state.loggedIn || state.doors.size <= 1) ordering = false
+  }
   LazyColumn(
     modifier = modifier.fillMaxSize(),
     state = listState,
     verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
     item {
-      Text("QinlinOpen", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+      Text("我的钥匙", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
     }
 
     if (!state.loggedIn) {
@@ -167,6 +180,21 @@ internal fun MainScreen(
         }
       }
 
+      item {
+        OutlinedButton(
+          onClick = { ordering = !ordering },
+          enabled = !state.busy && (ordering || state.doors.size > 1),
+        ) { Text(if (ordering) "完成排序" else "管理钥匙顺序") }
+      }
+
+      if (ordering) {
+        item {
+          Text(
+            "长按右侧手柄拖动排序。点击钥匙只会选择，不会开门。",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
       itemsIndexed(state.doors, key = { _, key -> key.stableId }) { index, key ->
         val itemIndex = FIRST_DOOR_ITEM_INDEX + index
         val dragging = reorderState.draggedItemIndex == itemIndex
@@ -179,7 +207,7 @@ internal fun MainScreen(
         DoorKeyButton(
           key = key,
           enabled = !state.busy,
-          onClick = { onOpenDoor(key) },
+          onClick = { onSelectDoor(key.stableId) },
           visual = visual,
           modifier =
             Modifier.zIndex(if (dragging) 1f else 0f).graphicsLayer {
@@ -221,6 +249,63 @@ internal fun MainScreen(
         )
       }
 
+      } else if (state.doors.isEmpty()) {
+        item {
+          Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+              modifier = Modifier.padding(24.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              Text(
+                if (state.busy) "正在读取钥匙…" else "当前没有可用钥匙",
+                style = MaterialTheme.typography.titleLarge,
+              )
+              Text(
+                "检查网络和账号授权后，可以尝试刷新钥匙。",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+          }
+        }
+      } else {
+        val selectedId = resolveSelectedDoorId(state.doors, state.selectedDoorId)
+        val selected = state.doors.first { it.stableId == selectedId }
+        val others = state.doors.filterNot { it.stableId == selectedId }
+        item {
+          WalletMainCard(
+            key = selected,
+            enabled = !state.busy,
+            visual = when (selected.stableId) {
+              state.openingDoorId -> DoorKeyVisual.Loading
+              state.successfulDoorId -> DoorKeyVisual.Success
+              else -> DoorKeyVisual.Normal
+            },
+            onClick = { onOpenDoor(selected) },
+          )
+        }
+        if (others.isNotEmpty()) {
+          item {
+            Text(
+              "其他钥匙 · ${others.size}",
+              style = MaterialTheme.typography.titleMedium,
+              fontWeight = FontWeight.Medium,
+            )
+          }
+          itemsIndexed(others, key = { _, key -> key.stableId }) { index, key ->
+            WalletOtherCard(
+              key = key,
+              index = index,
+              enabled = !state.busy,
+              onClick = {
+                onSelectDoor(key.stableId)
+                // Foreground card is always at index 3 in the logged-in wallet layout.
+                coroutineScope.launch { listState.scrollToItem(WALLET_MAIN_ITEM_INDEX) }
+              },
+            )
+          }
+        }
+      }
+
       item {
         OutlinedButton(
           onClick = {
@@ -229,7 +314,7 @@ internal fun MainScreen(
               Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                 manager.isRequestPinAppWidgetSupported
             if (!supported) {
-              Toast.makeText(context, "请从桌面的小组件列表添加 QinlinOpen", Toast.LENGTH_LONG).show()
+              Toast.makeText(context, "请从桌面的小组件列表添加 我的钥匙", Toast.LENGTH_LONG).show()
             } else {
               context.startActivity(
                 Intent(Intent.ACTION_MAIN)
@@ -252,7 +337,7 @@ internal fun MainScreen(
                   if (!requested) {
                     Toast.makeText(
                         applicationContext,
-                        "请从桌面的小组件列表添加 QinlinOpen",
+                        "请从桌面的小组件列表添加 我的钥匙",
                         Toast.LENGTH_LONG,
                       )
                       .show()
@@ -335,6 +420,157 @@ internal fun DoorKeyButton(
   }
 }
 
+@Composable
+private fun WalletMainCard(
+  key: DoorKey,
+  enabled: Boolean,
+  visual: DoorKeyVisual,
+  onClick: () -> Unit,
+) {
+  val colors = MaterialTheme.colorScheme
+  Card(
+    onClick = onClick,
+    enabled = enabled,
+    modifier = Modifier.fillMaxWidth().heightIn(min = 222.dp),
+    shape = RoundedCornerShape(28.dp),
+    colors = CardDefaults.cardColors(containerColor = colors.surfaceContainerLow),
+  ) {
+    Box(
+      modifier = Modifier.fillMaxWidth().background(
+        Brush.linearGradient(
+          listOf(
+            colors.surfaceContainerLowest,
+            colors.surfaceContainerHigh,
+            colors.primaryContainer,
+          )
+        )
+      )
+    ) {
+      Column(
+        modifier = Modifier.fillMaxWidth().heightIn(min = 222.dp).padding(24.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+      ) {
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.Top,
+        ) {
+          Column(modifier = Modifier.weight(1f)) {
+            Text(
+              "数字门禁钥匙",
+              style = MaterialTheme.typography.labelLarge,
+              color = colors.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+              key.doorName,
+              style = MaterialTheme.typography.headlineSmall,
+              fontWeight = FontWeight.SemiBold,
+            )
+            if (key.communityName.isNotBlank()) {
+              Text(
+                key.communityName,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+              )
+            }
+          }
+          Box(
+            modifier = Modifier.size(52.dp).background(
+              colors.primary.copy(alpha = 0.12f),
+              RoundedCornerShape(18.dp),
+            ),
+            contentAlignment = Alignment.Center,
+          ) {
+            when (visual) {
+              DoorKeyVisual.Normal ->
+                Icon(
+                  painter = painterResource(R.drawable.ic_lock_open),
+                  contentDescription = null,
+                  tint = colors.primary,
+                )
+              DoorKeyVisual.Loading ->
+                CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.dp)
+              DoorKeyVisual.Success ->
+                Icon(
+                  painter = painterResource(R.drawable.ic_check_circle),
+                  contentDescription = null,
+                  tint = colors.primary,
+                )
+            }
+          }
+        }
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+            when (visual) {
+              DoorKeyVisual.Normal -> "轻点卡片开门"
+              DoorKeyVisual.Loading -> "正在请求开门…"
+              DoorKeyVisual.Success -> "开门请求成功"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurfaceVariant,
+          )
+          Box(
+            modifier = Modifier.size(46.dp).background(colors.primary, RoundedCornerShape(23.dp)),
+            contentAlignment = Alignment.Center,
+          ) {
+            Icon(
+              painter = painterResource(R.drawable.ic_lock_open),
+              contentDescription = null,
+              tint = colors.onPrimary,
+              modifier = Modifier.size(24.dp),
+            )
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun WalletOtherCard(
+  key: DoorKey,
+  index: Int,
+  enabled: Boolean,
+  onClick: () -> Unit,
+) {
+  val colors = MaterialTheme.colorScheme
+  Card(
+    onClick = onClick,
+    enabled = enabled,
+    modifier = Modifier.fillMaxWidth().padding(horizontal = ((index % 3) * 4).dp).heightIn(min = 72.dp),
+    shape = RoundedCornerShape(22.dp),
+    colors = CardDefaults.cardColors(containerColor = colors.surfaceContainer),
+  ) {
+    Row(
+      modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 20.dp, vertical = 12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.ic_lock_open),
+        contentDescription = null,
+        tint = colors.primary,
+      )
+      Spacer(Modifier.width(14.dp))
+      Column(modifier = Modifier.weight(1f)) {
+        Text(key.doorName, fontWeight = FontWeight.Medium)
+        if (key.communityName.isNotBlank()) {
+          Text(
+            key.communityName,
+            color = colors.onSurfaceVariant,
+            style = MaterialTheme.typography.bodySmall,
+          )
+        }
+      }
+      Text("选择", color = colors.primary, style = MaterialTheme.typography.labelMedium)
+    }
+  }
+}
+
 internal enum class DoorKeyVisual {
   Normal,
   Loading,
@@ -404,4 +640,5 @@ private class DoorReorderState(private val listState: LazyListState) {
   }
 }
 
-private const val FIRST_DOOR_ITEM_INDEX = 2
+private const val WALLET_MAIN_ITEM_INDEX = 3
+private const val FIRST_DOOR_ITEM_INDEX = 4

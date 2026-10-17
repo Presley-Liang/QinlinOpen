@@ -8,6 +8,7 @@ import top.rpone.qinlinopen.data.QinlinApi
 import top.rpone.qinlinopen.data.QinlinApiException
 import top.rpone.qinlinopen.data.SavedConfiguration
 import top.rpone.qinlinopen.data.SecureStore
+import top.rpone.qinlinopen.data.openAndRememberSuccessfulDoor
 import top.rpone.qinlinopen.widget.DoorWidgetProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -27,6 +28,7 @@ data class MainScreenUiState(
   val loggedIn: Boolean = false,
   val busy: Boolean = false,
   val doors: List<DoorKey> = emptyList(),
+  val selectedDoorId: String? = null,
   val openingDoorId: String? = null,
   val successfulDoorId: String? = null,
 )
@@ -40,6 +42,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
       MainScreenUiState(
         phone = configuration?.phone.orEmpty(),
         loggedIn = configuration != null,
+        selectedDoorId = if (configuration != null) store.loadLastOpenedDoorId() else null,
       )
     )
   val uiState: StateFlow<MainScreenUiState> = _uiState.asStateFlow()
@@ -91,6 +94,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(
           loggedIn = true,
           securityCode = "",
+          selectedDoorId = null,
         )
       }
       loadDoors()
@@ -103,6 +107,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     launchRequest { loadDoors() }
   }
 
+  fun selectDoor(id: String) {
+    _uiState.update { state ->
+      if (state.busy || state.doors.none { it.stableId == id }) state
+      else state.copy(selectedDoorId = id, successfulDoorId = null)
+    }
+  }
+
   fun openDoor(key: DoorKey) {
     val current = configuration ?: return
     if (uiState.value.busy) return
@@ -111,10 +122,16 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         it.copy(busy = true, openingDoorId = key.stableId, successfulDoorId = null)
       }
       try {
-        withContext(Dispatchers.IO) { api.openDoor(current.sessionId, key) }
+        withContext(Dispatchers.IO) {
+          openAndRememberSuccessfulDoor(
+            stableId = key.stableId,
+            open = { api.openDoor(current.sessionId, key) },
+            remember = store::saveLastOpenedDoorId,
+          )
+        }
         showMessage("开门成功")
         _uiState.update {
-          it.copy(busy = false, openingDoorId = null, successfulDoorId = key.stableId)
+          it.copy(busy = false, openingDoorId = null, successfulDoorId = key.stableId, selectedDoorId = key.stableId)
         }
         delay(1_600)
         _uiState.update {
@@ -166,6 +183,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
       it.copy(
         loggedIn = true,
         doors = doors,
+        selectedDoorId = resolveSelectedDoorId(doors, it.selectedDoorId),
       )
     }
     if (doors.isEmpty()) showMessage("没有可用钥匙")
@@ -195,6 +213,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
           loggedIn = false,
           busy = false,
           doors = emptyList(),
+          selectedDoorId = null,
           openingDoorId = null,
           successfulDoorId = null,
         )
