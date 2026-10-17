@@ -119,3 +119,12 @@ Codex 在 `fd8bee9` 版本发现 4 项 P2：
 新增 `WalletGestureMathTest.kt` 的 9 组 JUnit 回归用例（待 Android Gradle 执行）；独立 Kotlin CLI 编译 `WalletGestureMath.kt` 并执行 9 项 smoke 校验**通过**。尚未运行 Compose / Android APK 编译、仪器测试或 120Hz 真机测试；本条只说明算法辅助文件的 JVM 编译与运行验证。
 
 - **额外连续性修复**：越界阻尼后的弹簧释放直接动画化**原始手势位移**，每一帧再做一次阻尼映射，避免把已阻尼的位移重复阻尼造成放手瞬间跳变；手指中途重新按下时仍从当前原始动画位置接管，补充对应测试。
+
+### PR #3 · Codex 第二轮审查修复（2026-10-17）
+
+本轮审查针对提交 `331832b` 新提出两条 P2：
+
+1. **中断上一轮弹簧时误切下一把钥匙**：界面继续沿用 `rawDragPx` 维持卡片连续的可见位置，但手势启动时另行记录 `dragStartRawPx`。新的滑动是否达到 72dp，改为仅看本次触摸行程 `rawDragPx - dragStartRawPx`；快速反向甩动仍依据本次松手速度，不把上一轮尚未回零的位移算作新的操作。用三项纯 Kotlin 回归用例覆盖中途再次按下、短拖不切换和相反方向长拖。
+2. **测试依赖模拟器动画系统配置**：`MainScreen` 内部 Composable 增加默认值为 `null` 的 `motionEnabledOverride` 测试注入接口，生产版本始终读取 Android 的动画偏好；手势仪器测试指定启用，新增关闭动画时正常点击开门的测试，从而使测试与 CI 设备 `ANIMATOR_DURATION_SCALE` 无关。
+
+当前阶段累计 `WalletGestureMathTest.kt` 12 项 JUnit 测试，Android 仪器测试新增关闭动效的可用性检查。纯 JVM 辅助函数可用 Kotlin CLI 单独检查；Compose/Android 构建与 OPPO 120Hz 真机指标仍然**未验收**。继续在同一 PR #3 修复并复审，不更改 `main`。
