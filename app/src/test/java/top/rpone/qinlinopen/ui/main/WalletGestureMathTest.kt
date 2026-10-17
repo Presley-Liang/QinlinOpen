@@ -137,8 +137,9 @@ class WalletGestureMathTest {
     val firstOutwardMove = walletDragFromVisibleBaseline(inherited, -2f, true, false, 48f)
     val inwardMove = walletDragFromVisibleBaseline(inherited, 30f, true, false, 48f)
     assertEquals(inherited, firstFrame, 0.001f)
-    assertTrue(firstOutwardMove < inherited)
-    assertTrue(firstOutwardMove > inherited - 2f)
+    // Inherited displacement beyond the new 48 px boundary remains visually
+    // continuous, but is not allowed to move even farther outward.
+    assertEquals(inherited, firstOutwardMove, 0.001f)
     assertEquals(-90f, inwardMove, 0.001f)
   }
 
@@ -149,8 +150,8 @@ class WalletGestureMathTest {
     val firstOutwardMove = walletDragFromVisibleBaseline(inherited, 2f, false, true, 48f)
     val inwardMove = walletDragFromVisibleBaseline(inherited, -30f, false, true, 48f)
     assertEquals(inherited, firstFrame, 0.001f)
-    assertTrue(firstOutwardMove > inherited)
-    assertTrue(firstOutwardMove < inherited + 2f)
+    // Do not ratchet an inherited out-of-range position farther outward.
+    assertEquals(inherited, firstOutwardMove, 0.001f)
     assertEquals(90f, inwardMove, 0.001f)
   }
 
@@ -166,6 +167,44 @@ class WalletGestureMathTest {
       walletDragFromVisibleBaseline(0f, 200f, false, true, 48f),
       0.001f,
     )
+  }
+
+  @Test
+  fun repeatedInterruptedFirstKeyRightwardDragsRemainBelowFortyEightPixels() {
+    var visible = 0f
+    repeat(20) {
+      // A new gesture begins before the previous return spring reaches zero.
+      visible = walletDragFromVisibleBaseline(visible, 300f, false, true, 48f)
+      assertTrue("First key drifted outside resistance: $visible", visible in 0f..48f)
+    }
+    assertTrue(visible > 0f)
+  }
+
+  @Test
+  fun repeatedInterruptedLastKeyLeftwardDragsRemainAboveMinusFortyEightPixels() {
+    var visible = 0f
+    repeat(20) {
+      visible = walletDragFromVisibleBaseline(visible, -300f, true, false, 48f)
+      assertTrue("Last key drifted outside resistance: $visible", visible in -48f..0f)
+    }
+    assertTrue(visible < 0f)
+  }
+
+  @Test
+  fun draggingInwardCrossingCenterUsesOppositeBoundaryResistance() {
+    // One visible baseline may be inherited from an earlier selected key.
+    val pastCenterOnFirst = walletDragFromVisibleBaseline(-100f, 300f, false, true, 48f)
+    val pastCenterOnLast = walletDragFromVisibleBaseline(100f, -300f, true, false, 48f)
+    assertTrue(pastCenterOnFirst in 0f..48f)
+    assertTrue(pastCenterOnLast in -48f..0f)
+  }
+
+  @Test
+  fun interruptedEdgeReturnDoesNotJumpOnZeroMovement() {
+    assertEquals(38f, walletDragFromVisibleBaseline(38f, 0f, false, true, 48f), 0.001f)
+    assertEquals(-38f, walletDragFromVisibleBaseline(-38f, 0f, true, false, 48f), 0.001f)
+    assertEquals(-120f, walletDragFromVisibleBaseline(-120f, 0f, true, false, 48f), 0.001f)
+    assertEquals(120f, walletDragFromVisibleBaseline(120f, 0f, false, true, 48f), 0.001f)
   }
 
   @Test
