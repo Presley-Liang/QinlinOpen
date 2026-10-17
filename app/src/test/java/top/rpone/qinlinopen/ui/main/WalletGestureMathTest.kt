@@ -75,6 +75,17 @@ class WalletGestureMathTest {
   }
 
   @Test
+  fun boundaryReturnSpringStartsFromIdenticalDisplayedOffset() {
+    val rawOnRelease = 240f
+    val visibleOnRelease = walletDragOffset(rawOnRelease, false, true, 48f)
+    val firstSpringFrame = walletDragOffset(rawOnRelease, false, true, 48f)
+    val laterSpringFrame = walletDragOffset(180f, false, true, 48f)
+    assertEquals(visibleOnRelease, firstSpringFrame, 0.001f)
+    assertTrue(laterSpringFrame < firstSpringFrame)
+    assertEquals(0f, walletDragOffset(0f, false, true, 48f), 0.001f)
+  }
+
+  @Test
   fun smallSlowGestureDoesNotSwitch() {
     assertEquals(0, walletSwipeDirection(35f, 350f, 72f, 900f, true, true))
   }
