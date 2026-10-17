@@ -193,12 +193,12 @@ internal fun WalletMainCard(
         onDragStarted = {
           suppressOpenUntil = SystemClock.uptimeMillis() + 1_000L
           settleJob?.cancel()
-          // Continue from the actual visible offset if a spring was interrupted.
-          rawDragPx = offsetPx
+          // rawDragPx is updated on every spring frame, so canceling keeps the
+          // next gesture continuous without applying edge resistance twice.
         },
         onDragStopped = { velocity ->
           suppressOpenUntil = SystemClock.uptimeMillis() + 250L
-          val oldOffset = offsetPx
+          val oldRawOffset = rawDragPx
           // Distance wins only if it crossed the full selection threshold.
           // For a shorter gesture reversed at release, velocity determines direction.
           val direction = walletSwipeDirection(
@@ -219,7 +219,7 @@ internal fun WalletMainCard(
           settleJob?.cancel()
           settleJob = scope.launch {
             animate(
-              initialValue = oldOffset,
+              initialValue = oldRawOffset,
               targetValue = 0f,
               initialVelocity = settlingVelocity,
               animationSpec = spring(
@@ -227,10 +227,11 @@ internal fun WalletMainCard(
                 stiffness = Spring.StiffnessMediumLow,
               ),
             ) { value, _ ->
+              rawDragPx = value
               offsetPx = walletDragOffset(value, canSwipePrevious, canSwipeNext, edgeLimit)
             }
-            offsetPx = 0f
             rawDragPx = 0f
+            offsetPx = 0f
           }
         },
       ),
