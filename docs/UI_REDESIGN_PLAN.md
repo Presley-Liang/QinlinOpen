@@ -116,4 +116,6 @@ Codex 在 `fd8bee9` 版本发现 4 项 P2：
 3. **不同像素密度速度衰减不一致**：弹簧释放速度上限从固定 1800px/s 改为 `1800.dp.toPx()`；距离阈值、速度阈值与越界阻力均使用密度转换。
 4. **反向甩动误选**：只在位移本身超过 72dp 时采用位移方向；否则如果甩动速度超过 900dp/s，就按松手**速度**方向选择，覆盖此前 24～72dp 的反向偏移。抽出纯 Kotlin `walletSwipeDirection`，便于独立测试。
 
-新增 `WalletGestureMathTest.kt` 的 8 组 JUnit 回归用例（待 Android Gradle 执行）；独立 Kotlin CLI 编译 `WalletGestureMath.kt` 并执行 9 项 smoke 校验**通过**。尚未运行 Compose / Android APK 编译、仪器测试或 120Hz 真机测试；本条只说明算法辅助文件的 JVM 编译与运行验证。
+新增 `WalletGestureMathTest.kt` 的 9 组 JUnit 回归用例（待 Android Gradle 执行）；独立 Kotlin CLI 编译 `WalletGestureMath.kt` 并执行 9 项 smoke 校验**通过**。尚未运行 Compose / Android APK 编译、仪器测试或 120Hz 真机测试；本条只说明算法辅助文件的 JVM 编译与运行验证。
+
+- **额外连续性修复**：越界阻尼后的弹簧释放直接动画化**原始手势位移**，每一帧再做一次阻尼映射，避免把已阻尼的位移重复阻尼造成放手瞬间跳变；手指中途重新按下时仍从当前原始动画位置接管，补充对应测试。
