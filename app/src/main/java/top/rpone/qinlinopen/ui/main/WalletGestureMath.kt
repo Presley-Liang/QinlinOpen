@@ -25,6 +25,28 @@ internal fun walletDragOffset(
 }
 
 /**
+ * Preserve the exact visible position at the start of a new drag, even when
+ * the selected key changed while a previous spring was still returning.
+ *
+ * Resistance applies only to the CURRENT gesture's additional travel. If an
+ * inherited -120 px was legal for the previous key but is now out of bounds for
+ * the new key, remapping the entire -120 px would cause an instant jump.
+ */
+internal fun walletDragFromVisibleBaseline(
+  startVisiblePx: Float,
+  gestureTravelPx: Float,
+  canSwipePrevious: Boolean,
+  canSwipeNext: Boolean,
+  limitPx: Float,
+): Float =
+  startVisiblePx + walletDragOffset(
+    gestureTravelPx,
+    canSwipePrevious,
+    canSwipeNext,
+    limitPx,
+  )
+
+/**
  * +1 is the next key (finger left), -1 the previous key (finger right).
  * The release velocity is decisive when this gesture's traveled distance did
  * not reach its threshold, particularly when a user reverses before release.
